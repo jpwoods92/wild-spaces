@@ -1127,13 +1127,22 @@ export class WhaleScene extends Phaser.Scene {
       }
     }
 
-    // Shipping vessels
+    // Shipping vessels — wrap relative to the live camera viewport + 380px off-screen buffer
+    // so ships always enter and exit completely off-screen regardless of where the whale swims
+    const camCenterX =
+      this.cameras.main.scrollX + this.cameras.main.width * 0.5;
+    const dynamicHalfSpan = Math.max(
+      1200,
+      this.cameras.main.width * 0.5 + 380
+    );
+    const dynamicSpan = dynamicHalfSpan * 2;
+
     for (const ship of this.shippingVessels) {
       ship.x += ship.vx * dt;
-      if (ship.vx > 0 && ship.x > ship.loopMaxX) {
-        ship.x = ship.loopMinX;
-      } else if (ship.vx < 0 && ship.x < ship.loopMinX) {
-        ship.x = ship.loopMaxX;
+      if (ship.x > camCenterX + dynamicHalfSpan) {
+        ship.x -= dynamicSpan;
+      } else if (ship.x < camCenterX - dynamicHalfSpan) {
+        ship.x += dynamicSpan;
       }
       ship.sprite.setPosition(ship.x, ship.y);
 

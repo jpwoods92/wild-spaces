@@ -668,7 +668,10 @@ export class PolarBearScene extends Phaser.Scene {
   private spawnShippingLane(): void {
     const laneGraphics = this.add.graphics().setDepth(1);
     const centerX = this.WORLD_WIDTH / 2;
-    const loopHalfSpan = 880; // 1,760px loop width so 4 ships per lane are always spaced ~440px apart
+    // Span beyond the full world bounds (-280 .. WORLD_WIDTH + 280) so ships only wrap completely off-screen
+    const minLoopX = -280;
+    const maxLoopX = this.WORLD_WIDTH + 280;
+    const totalLoopWidth = maxLoopX - minLoopX;
 
     for (const centerCorridorY of this.shippingCorridorCenters) {
       // Draw 3-lane hazard corridor markers on ocean backdrop
@@ -714,30 +717,27 @@ export class PolarBearScene extends Phaser.Scene {
         .setDepth(2);
 
       const speedBoost = Math.min(36, (this.level - 1) * 8);
-      // 2 lanes of vessel traffic with 2 ships per lane and moderate speeds
+      // 2 lanes of vessel traffic with 3 ships per lane across the full 2,960px off-screen loop (~986px spacing)
       const lanes = [
         {
           y: centerCorridorY - 62,
           vx: 175 + speedBoost,
-          shipsInLane: 2,
+          shipsInLane: 3,
           phaseOffset: 0,
         },
         {
           y: centerCorridorY + 62,
           vx: -(195 + speedBoost),
-          shipsInLane: 2,
-          phaseOffset: 440,
+          shipsInLane: 3,
+          phaseOffset: 490,
         },
       ];
 
-      const totalLoopWidth = loopHalfSpan * 2;
       for (const lane of lanes) {
         const spacing = totalLoopWidth / lane.shipsInLane;
         for (let s = 0; s < lane.shipsInLane; s++) {
           const startX =
-            centerX -
-            loopHalfSpan +
-            ((s * spacing + lane.phaseOffset) % totalLoopWidth);
+            minLoopX + ((s * spacing + lane.phaseOffset) % totalLoopWidth);
 
           const wakeGraphics = this.add.graphics().setDepth(13);
           const sprite = this.add
@@ -1232,9 +1232,9 @@ export class PolarBearScene extends Phaser.Scene {
   }
 
   private updateShips(dt: number): void {
-    const centerX = this.WORLD_WIDTH / 2;
-    const minLoopX = centerX - 880;
-    const maxLoopX = centerX + 880;
+    // Wrap well outside the world & camera bounds (-280 .. WORLD_WIDTH + 280) so ships never pop in/out on screen
+    const minLoopX = -280;
+    const maxLoopX = this.WORLD_WIDTH + 280;
 
     for (const ship of this.ships) {
       ship.sprite.x += ship.vx * dt;
