@@ -308,7 +308,8 @@ export class WhaleScene extends Phaser.Scene {
   private getDifficultyProfile(): {
     bloomSpacingY: number;
     ghostNetChance: number;
-    seismicBuoyCount: number;
+    routeBuoyCount: number;
+    ambientBuoyCount: number;
     shipNoiseInterval: number;
     shipNoiseRadius: number;
     buoyNoiseRadius: number;
@@ -321,13 +322,15 @@ export class WhaleScene extends Phaser.Scene {
     const bloomSpacingY = Math.min(520, 310 + lvlOffset * 42);
     // Ghost net density increases up to a cap
     const ghostNetChance = Math.min(0.88, 0.5 + lvlOffset * 0.08);
-    // Seismic survey buoys start at just 1 on Level 1 and scale up to 6
-    const seismicBuoyCount = Math.min(6, 1 + lvlOffset);
+    // Seismic survey buoys along the calf route start at 4 on Level 1 and increase by +3 per level (up to 19)
+    const routeBuoyCount = Math.min(19, 4 + lvlOffset * 3);
+    // Ambient 360° ocean seismic buoys start at 6 on Level 1 and increase by +4 per level (up to 26)
+    const ambientBuoyCount = Math.min(26, 6 + lvlOffset * 4);
 
     // Acoustic noise intensity scales up gradually across levels instead of hitting hard on Level 1
     const shipNoiseInterval = Math.max(1.75, 3.2 - lvlOffset * 0.32);
     const shipNoiseRadius = Math.min(350, 210 + lvlOffset * 32);
-    const buoyNoiseRadius = Math.min(420, 260 + lvlOffset * 35);
+    const buoyNoiseRadius = Math.min(430, 280 + lvlOffset * 32);
     const maskingDuration = Math.min(2.2, 1.0 + lvlOffset * 0.28);
     const maskedCallRadius = Math.max(420, 590 - lvlOffset * 38);
     const maskedDecayMultiplier = Math.min(2.0, 1.25 + lvlOffset * 0.18);
@@ -335,7 +338,8 @@ export class WhaleScene extends Phaser.Scene {
     return {
       bloomSpacingY,
       ghostNetChance,
-      seismicBuoyCount,
+      routeBuoyCount,
+      ambientBuoyCount,
       shipNoiseInterval,
       shipNoiseRadius,
       buoyNoiseRadius,
@@ -423,8 +427,12 @@ export class WhaleScene extends Phaser.Scene {
   }
 
   private spawnOceanMigrationField(): void {
-    const { bloomSpacingY, ghostNetChance, seismicBuoyCount } =
-      this.getDifficultyProfile();
+    const {
+      bloomSpacingY,
+      ghostNetChance,
+      routeBuoyCount,
+      ambientBuoyCount,
+    } = this.getDifficultyProfile();
 
     // Guaranteed starting copepod bloom & nearby ghost net near spawn (disguised until sonar sweeps them)
     const introAngle = this.calfAngle + 0.35;
@@ -479,17 +487,21 @@ export class WhaleScene extends Phaser.Scene {
       }
     }
 
-    // Spawn Acoustic Seismic Survey Buoys along the path between start and calf
-    for (let i = 0; i < seismicBuoyCount; i++) {
-      const frac = (i + 0.5) / (seismicBuoyCount + 0.4);
+    const pulseInterval = Math.max(2.1, 3.8 - (this.level - 1) * 0.3);
+
+    // 1. Spawn Seismic Survey Buoys directly along the route toward the calf (including an early one at ~14% distance)
+    for (let i = 0; i < routeBuoyCount; i++) {
+      const frac = 0.14 + (i / Math.max(1, routeBuoyCount - 1)) * 0.74;
       const baseBx = this.startX + (this.goalX - this.startX) * frac;
       let baseBy = this.startY + (this.goalY - this.startY) * frac;
       if (isInsideCorridor(baseBy)) {
-        baseBy += 240;
+        baseBy += 230;
       }
       const perpAngle = this.calfAngle + Math.PI / 2;
+      // Keep the first buoy close to the direct bearing so the player always sees one early on Level 1
+      const maxOffset = i === 0 ? 95 : 220;
       const sideOffset =
-        (i % 2 === 0 ? 1 : -1) * Phaser.Math.Between(160, 340);
+        (i % 2 === 0 ? 1 : -1) * Phaser.Math.Between(45, maxOffset);
       const buoyX = baseBx + Math.cos(perpAngle) * sideOffset;
       const buoyY = baseBy + Math.sin(perpAngle) * sideOffset;
 
@@ -500,8 +512,35 @@ export class WhaleScene extends Phaser.Scene {
       this.seismicBuoys.push({
         x: buoyX,
         y: buoyY,
-        pulseTimer: Phaser.Math.FloatBetween(0, 2.2),
-        pulseInterval: Math.max(2.2, 4.2 - (this.level - 1) * 0.35),
+        pulseTimer: Phaser.Math.FloatBetween(0, pulseInterval),
+        pulseInterval,
+        sprite,
+      });
+    }
+
+    // 2. Spawn Ambient Seismic Survey Buoys distributed across the 360° ocean (scales up with level)
+    for (let j = 0; j < ambientBuoyCount; j++) {
+      const ringFrac = (j + 0.5) / ambientBuoyCount;
+      const r = 680 + ringFrac * (this.targetRadiusPx - 850);
+      const theta =
+        this.calfAngle +
+        ((j + 1) / (ambientBuoyCount + 1)) * Math.PI * 1.85 +
+        0.25;
+      const buoyX = this.startX + Math.cos(theta) * r;
+      let buoyY = this.startY + Math.sin(theta) * r;
+      if (isInsideCorridor(buoyY)) {
+        buoyY += 230;
+      }
+
+      const sprite = this.add
+        .image(buoyX, buoyY, 'seismic_buoy')
+        .setDepth(14);
+
+      this.seismicBuoys.push({
+        x: buoyX,
+        y: buoyY,
+        pulseTimer: Phaser.Math.FloatBetween(0, pulseInterval),
+        pulseInterval,
         sprite,
       });
     }
