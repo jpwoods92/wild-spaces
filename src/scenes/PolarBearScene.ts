@@ -621,6 +621,7 @@ export class PolarBearScene extends Phaser.Scene {
         fontSize: '12px',
         fontStyle: 'bold',
         color: '#7dd3fc',
+        wordWrap: { width: 340 },
       })
       .setScrollFactor(0)
       .setDepth(101);
@@ -1171,12 +1172,6 @@ export class PolarBearScene extends Phaser.Scene {
     const { width, height } = this.scale;
     this.hudGraphics.clear();
 
-    // Compact HUD Panel Box for single Stamina meter
-    this.hudGraphics.fillStyle(0x06121e, 0.88);
-    this.hudGraphics.fillRoundedRect(16, 12, 344, 120, 10);
-    this.hudGraphics.lineStyle(1, 0x38bdf8, 0.3);
-    this.hudGraphics.strokeRoundedRect(16, 12, 344, 120, 10);
-
     const metersRemaining = Math.max(
       0,
       Math.round(
@@ -1193,16 +1188,6 @@ export class PolarBearScene extends Phaser.Scene {
     const anomaly = (2.6 + (1000 - metersRemaining) * 0.0009).toFixed(1);
     this.hudTempText.setText(`Arctic Temp Anomaly: +${anomaly}°C (Rapid Melt)`);
 
-    // Single Stamina Bar (with Max Stamina ceiling indicator)
-    this.drawMeterBar(
-      28,
-      71,
-      316,
-      20,
-      this.stamina / 100,
-      this.stamina < 28 ? 0xef4444 : 0x0ea5e9,
-      this.maxStamina / 100
-    );
     this.hudStaminaLabel.setText(
       `STAMINA: ${Math.round(this.stamina)}% (MAX ${Math.round(this.maxStamina)}%)`
     );
@@ -1219,15 +1204,40 @@ export class PolarBearScene extends Phaser.Scene {
         );
         this.hudStatusText.setColor(secsLeft < 1.8 ? '#f87171' : '#fbbf24');
         this.hudStatusText.setText(
-          `● ICE CRACKING — Breaks apart in ${secsLeft.toFixed(1)}s!`
+          `● ICE CRACKING — Breaks in ${secsLeft.toFixed(1)}s!`
         );
       }
     } else {
       this.hudStatusText.setColor('#f87171');
       this.hudStatusText.setText(
-        '≈ SWIMMING — Max Stamina dropping! Eat seals to restore.'
+        '≈ SWIMMING — Max Stamina dropping (Eat seals)'
       );
     }
+
+    // Dynamically size HUD panel so text never overflows
+    const contentWidth = Math.max(
+      340,
+      this.hudDistanceText.width,
+      this.hudStatusText.width
+    );
+    const panelWidth = contentWidth + 28;
+    const panelHeight = 104 + this.hudStatusText.height;
+
+    this.hudGraphics.fillStyle(0x06121e, 0.88);
+    this.hudGraphics.fillRoundedRect(16, 12, panelWidth, panelHeight, 10);
+    this.hudGraphics.lineStyle(1, 0x38bdf8, 0.3);
+    this.hudGraphics.strokeRoundedRect(16, 12, panelWidth, panelHeight, 10);
+
+    // Single Stamina Bar (with Max Stamina ceiling indicator)
+    this.drawMeterBar(
+      28,
+      71,
+      panelWidth - 24,
+      20,
+      this.stamina / 100,
+      this.stamina < 28 ? 0xef4444 : 0x0ea5e9,
+      this.maxStamina / 100
+    );
 
     // Low-stamina danger vignette
     this.exhaustionVignette.clear();
