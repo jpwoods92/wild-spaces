@@ -126,9 +126,12 @@ function renderImpactLeaderboard(params: {
   if (params.won && isNewBest) {
     lbBadge.textContent = '★ NEW PERSONAL BEST!';
     lbBadge.style.color = '#34d399';
+    lbBadge.title = '';
   } else {
-    lbBadge.textContent = 'Saved on This Device';
+    lbBadge.textContent = 'Local Storage';
     lbBadge.style.color = '#94a3b8';
+    lbBadge.title =
+      'Times are stored locally only and lost if browser storage is cleared.';
   }
 
   if (entries.length === 0) {
@@ -346,8 +349,7 @@ document.getElementById('btn-leaderboard')?.addEventListener('click', () => {
   const title = document.getElementById('info-title')!;
   const body = document.getElementById('info-body')!;
 
-  tag.className = 'modal-tag success';
-  tag.textContent = 'Personal Skill Tracker (Local Storage)';
+  tag.style.display = 'none';
   title.textContent = 'Personal Best Completion Times';
 
   const renderEpisodeSection = (episodeId: string, label: string): string => {
@@ -356,7 +358,7 @@ document.getElementById('btn-leaderboard')?.addEventListener('click', () => {
       return `
         <div class="leaderboard-box" style="margin-bottom:14px;">
           <div class="leaderboard-header"><span>${label}</span><span>No Completions Yet</span></div>
-          <p style="font-size:12px; color:#94a3b8;">Complete a level to record your personal best time on this device.</p>
+          <p style="font-size:12px; color:#94a3b8;">Complete a level to record your personal best time.</p>
         </div>
       `;
     }
@@ -387,9 +389,15 @@ document.getElementById('btn-leaderboard')?.addEventListener('click', () => {
   };
 
   body.innerHTML = `
-    <p style="margin-bottom: 12px;">
-      Your fastest completion times for every episode and level are saved automatically in your browser’s <code>localStorage</code> so you can track your skill over time.
-    </p>
+    <div>
+      <span
+        class="storage-chip"
+        data-tooltip="Times are stored locally only and lost if browser storage is cleared."
+        title="Times are stored locally only and lost if browser storage is cleared."
+      >
+        Local Storage
+      </span>
+    </div>
     ${renderEpisodeSection(
       'PolarBearScene',
       'Episode 1 • The Thinning North (Polar Bear)'
@@ -433,6 +441,7 @@ document.getElementById('btn-artist-spec')?.addEventListener('click', () => {
   const assets = isWhale ? WHALE_ASSETS : POLAR_BEAR_ASSETS;
   const folder = isWhale ? 'public/assets/whale/' : 'public/assets/polar-bear/';
 
+  tag.style.display = 'inline-block';
   tag.className = 'modal-tag';
   tag.textContent = isWhale
     ? 'Artist Commission Brief (Episode 2 • Right Whale)'
@@ -472,6 +481,7 @@ document.getElementById('btn-charity')?.addEventListener('click', () => {
   const title = document.getElementById('info-title')!;
   const body = document.getElementById('info-body')!;
 
+  tag.style.display = 'inline-block';
   tag.className = 'modal-tag success';
   tag.textContent = 'World Wildlife Fund & Conservation';
   title.textContent = 'Protect Real Wild Spaces';

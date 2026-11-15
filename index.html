@@ -207,6 +207,56 @@
         color: #6ee7b7;
       }
 
+      .storage-chip {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 4px 10px;
+        border-radius: 99px;
+        background: rgba(56, 189, 248, 0.14);
+        border: 1px solid rgba(56, 189, 248, 0.32);
+        color: #7dd3fc;
+        cursor: help;
+        margin-bottom: 14px;
+      }
+
+      .storage-chip::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        left: 0;
+        top: calc(100% + 7px);
+        width: max-content;
+        max-width: 280px;
+        padding: 7px 10px;
+        border-radius: 6px;
+        background: #040d17;
+        border: 1px solid rgba(92, 225, 230, 0.35);
+        color: #e2e8f0;
+        font-size: 11px;
+        font-weight: 500;
+        text-transform: none;
+        letter-spacing: normal;
+        line-height: 1.4;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.65);
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-3px);
+        transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+        pointer-events: none;
+        z-index: 60;
+      }
+
+      .storage-chip:hover::after {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+      }
+
       .modal-title {
         font-size: 24px;
         font-weight: 800;
