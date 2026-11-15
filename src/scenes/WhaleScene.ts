@@ -53,6 +53,13 @@ interface AcousticWave {
   color: number;
 }
 
+interface EchoBeacon {
+  angle: number;
+  timer: number;
+  maxTimer: number;
+  isDecoy: boolean;
+}
+
 export interface WhaleSceneData {
   level?: number;
   cumulativeMeters?: number;
@@ -62,17 +69,22 @@ export interface WhaleSceneData {
 }
 
 export class WhaleScene extends Phaser.Scene {
-  // World dimensions
-  private readonly WORLD_WIDTH = 2400;
+  // World dimensions (2D open ocean in all 360 degrees)
   private readonly BASE_MIGRATION_METERS = 1000;
   private readonly METERS_PER_LEVEL_STEP = 300;
   private readonly PIXELS_PER_METER = 6.2;
+  private readonly DECOY_CLEAR_DISTANCE_METERS = 420;
 
   private level = 1;
   private migrationDistanceMeters = 1000;
-  private worldHeight = 7000;
-  private startY = 6600;
-  private goalY = 420;
+  private targetRadiusPx = 6200;
+  private worldWidth = 15200;
+  private worldHeight = 15200;
+  private startX = 7600;
+  private startY = 7600;
+  private calfAngle = -Math.PI / 2;
+  private goalX = 7600;
+  private goalY = 1400;
 
   private cumulativeMetersBeforeLevel = 0;
   private cumulativeSwumBeforeLevel = 0;
@@ -81,8 +93,8 @@ export class WhaleScene extends Phaser.Scene {
 
   // Player state
   private whale!: Phaser.GameObjects.Image;
-  private whaleX = 1200;
-  private whaleY = 6600;
+  private whaleX = 7600;
+  private whaleY = 7600;
   private whaleVx = 0;
   private whaleVy = 0;
 
@@ -94,11 +106,13 @@ export class WhaleScene extends Phaser.Scene {
   private noiseMaskingTimer = 0;
   private callCooldownTimer = 0;
   private callCooldownMax = 2.6;
-  private calfBeaconTimer = 0;
+  private echoBeacons: EchoBeacon[] = [];
+  private announcedDecoyLock = false;
   private isEnding = false;
 
   // Stats
   private maxNorthMetersInLevel = 0;
+  private currentMetersToCalf = 1000;
   private swimPixels = 0;
   private bloomsConsumed = 0;
   private entanglementsHit = 0;
@@ -110,7 +124,6 @@ export class WhaleScene extends Phaser.Scene {
   private shippingVessels: ShippingVessel[] = [];
   private acousticWaves: AcousticWave[] = [];
   private calfSprite!: Phaser.GameObjects.Image;
-  private calfCallTimer = 0;
 
   // Visual layers
   private viewportOceanBg!: Phaser.GameObjects.Graphics;
@@ -152,11 +165,28 @@ export class WhaleScene extends Phaser.Scene {
 
     this.migrationDistanceMeters =
       this.BASE_MIGRATION_METERS + (this.level - 1) * this.METERS_PER_LEVEL_STEP;
-    this.goalY = 420;
-    this.startY =
-      this.goalY +
-      Math.round(this.migrationDistanceMeters * this.PIXELS_PER_METER);
-    this.worldHeight = this.startY + 460;
+    this.targetRadiusPx = Math.round(
+      this.migrationDistanceMeters * this.PIXELS_PER_METER
+    );
+
+    const worldSize = this.targetRadiusPx * 2 + 2800;
+    this.worldWidth = worldSize;
+    this.worldHeight = worldSize;
+    this.startX = Math.round(worldSize / 2);
+    this.startY = Math.round(worldSize / 2);
+
+    // Choose a random 360-degree bearing for the Calf Sanctuary (with enough vertical component for shipping lane crossings)
+    let angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+    while (Math.abs(Math.sin(angle)) < 0.42) {
+      angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+    }
+    this.calfAngle = angle;
+    this.goalX = Math.round(
+      this.startX + Math.cos(this.calfAngle) * this.targetRadiusPx
+    );
+    this.goalY = Math.round(
+      this.startY + Math.sin(this.calfAngle) * this.targetRadiusPx
+    );
   }
 
   create(): void {
@@ -172,22 +202,22 @@ export class WhaleScene extends Phaser.Scene {
     // 1. Deep North Atlantic Ocean Backdrop
     this.createOceanBackdrop();
 
-    // 2. Spawn Northern Bay Sanctuary, Copepod Blooms, Ghost Nets, Seismic Buoys & Shipping Lanes
+    // 2. Spawn Sanctuary at random 360° bearing, Copepod Blooms, Ghost Nets, Seismic Buoys & Shipping Lanes
     this.spawnSanctuary();
-    this.spawnOceanMigrationField();
     this.spawnShippingCorridors();
+    this.spawnOceanMigrationField();
 
     // 3. Acoustic wave & entangled rope layers
     this.acousticGraphics = this.add.graphics().setDepth(16);
     this.entangledRopeGraphics = this.add.graphics().setDepth(19);
 
-    // 4. Spawn Player North Atlantic Right Whale
-    this.whaleX = this.WORLD_WIDTH / 2;
+    // 4. Spawn Player North Atlantic Right Whale at center with a random initial facing angle
+    this.whaleX = this.startX;
     this.whaleY = this.startY;
     this.whale = this.add
       .image(this.whaleX, this.whaleY, 'whale_swim')
       .setDepth(20)
-      .setRotation(-Math.PI / 2);
+      .setRotation(Phaser.Math.FloatBetween(-Math.PI, Math.PI));
 
     // 5. Ambient marine snow particles
     this.add
@@ -221,9 +251,9 @@ export class WhaleScene extends Phaser.Scene {
       .setOrigin(0.5, 1)
       .setDepth(33);
 
-    // 8. Camera Setup
-    this.cameras.main.setBounds(0, 0, this.WORLD_WIDTH, this.worldHeight);
-    this.cameras.main.startFollow(this.whale, true, 0.09, 0.09, 0, 110);
+    // 8. Camera Setup (centered on whale for 360-degree navigation)
+    this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
+    this.cameras.main.startFollow(this.whale, true, 0.09, 0.09, 0, 0);
 
     // 9. Controls
     this.cursors = this.input.keyboard!.createCursorKeys();
@@ -238,7 +268,7 @@ export class WhaleScene extends Phaser.Scene {
     // 10. Top-Left HUD
     this.createHUD();
 
-    // Emit an initial welcome sonar pulse so the player immediately sees how echolocation works
+    // Emit an initial welcome sonar pulse so the player immediately sees the first bearing echo
     this.emitWhaleCall(true);
 
     this.scale.on('resize', this.handleResize, this);
@@ -252,9 +282,11 @@ export class WhaleScene extends Phaser.Scene {
     this.noiseMaskingTimer = 0;
     this.callCooldownTimer = 0;
     this.callCooldownMax = 2.6;
-    this.calfBeaconTimer = 0;
+    this.echoBeacons = [];
+    this.announcedDecoyLock = false;
     this.isEnding = false;
     this.maxNorthMetersInLevel = 0;
+    this.currentMetersToCalf = this.migrationDistanceMeters;
     this.swimPixels = 0;
     this.bloomsConsumed = 0;
     this.entanglementsHit = 0;
@@ -322,13 +354,16 @@ export class WhaleScene extends Phaser.Scene {
 
     const bg = this.add.graphics().setDepth(0);
     bg.fillGradientStyle(0x020813, 0x020813, 0x07192e, 0x051324, 1);
-    bg.fillRect(0, 0, this.WORLD_WIDTH, this.worldHeight);
+    bg.fillRect(0, 0, this.worldWidth, this.worldHeight);
 
-    // Subtle bathymetric depth contours
+    // Subtle 2D bathymetric depth grid contours across the open ocean
     this.oceanCurrentGraphics = this.add.graphics().setDepth(1);
-    this.oceanCurrentGraphics.lineStyle(1, 0x1e3a5f, 0.22);
-    for (let y = 160; y < this.worldHeight; y += 220) {
-      this.oceanCurrentGraphics.lineBetween(0, y, this.WORLD_WIDTH, y);
+    this.oceanCurrentGraphics.lineStyle(1, 0x1e3a5f, 0.2);
+    for (let y = 200; y < this.worldHeight; y += 260) {
+      this.oceanCurrentGraphics.lineBetween(0, y, this.worldWidth, y);
+    }
+    for (let x = 200; x < this.worldWidth; x += 260) {
+      this.oceanCurrentGraphics.lineBetween(x, 0, x, this.worldHeight);
     }
   }
 
@@ -345,27 +380,26 @@ export class WhaleScene extends Phaser.Scene {
   }
 
   private spawnSanctuary(): void {
-    const centerX = this.WORLD_WIDTH / 2;
-
-    // Warm bioluminescent Northern Feeding & Calving Bay Sanctuary
+    // Warm bioluminescent Calving & Feeding Sanctuary at random 360° location (goalX, goalY)
     const sanctuaryGlow = this.add.graphics().setDepth(4);
-    sanctuaryGlow.fillStyle(0x0ea5e9, 0.12);
-    sanctuaryGlow.fillEllipse(centerX, this.goalY - 30, 1400, 380);
-    sanctuaryGlow.fillStyle(0x38bdf8, 0.2);
-    sanctuaryGlow.fillEllipse(centerX, this.goalY - 20, 960, 250);
+    sanctuaryGlow.fillStyle(0x0ea5e9, 0.14);
+    sanctuaryGlow.fillCircle(this.goalX, this.goalY, 320);
+    sanctuaryGlow.fillStyle(0x38bdf8, 0.22);
+    sanctuaryGlow.fillCircle(this.goalX, this.goalY, 210);
     sanctuaryGlow.lineStyle(2, 0x38bdf8, 0.55);
-    sanctuaryGlow.strokeEllipse(centerX, this.goalY - 20, 960, 250);
+    sanctuaryGlow.strokeCircle(this.goalX, this.goalY, 210);
 
-    // Waiting Right Whale Calf
+    // Waiting Right Whale Calf facing back toward the center
+    const faceMotherAngle = this.calfAngle + Math.PI;
     this.calfSprite = this.add
-      .image(centerX, this.goalY - 15, 'whale_calf')
+      .image(this.goalX, this.goalY, 'whale_calf')
       .setDepth(18)
-      .setRotation(Math.PI / 2);
+      .setRotation(faceMotherAngle);
 
     this.tweens.add({
       targets: this.calfSprite,
-      y: this.goalY - 5,
-      angle: { from: 82, to: 98 },
+      x: this.goalX + Math.cos(faceMotherAngle) * 12,
+      y: this.goalY + Math.sin(faceMotherAngle) * 12,
       duration: 1600,
       yoyo: true,
       repeat: -1,
@@ -374,11 +408,11 @@ export class WhaleScene extends Phaser.Scene {
 
     const bannerText =
       this.level === 1
-        ? 'NORTHERN CALVING SANCTUARY — REUNITE WITH YOUR CALF'
-        : `NORTHERN SANCTUARY (LEVEL ${this.level}) — REUNITE WITH YOUR CALF`;
+        ? 'CALVING SANCTUARY — REUNITE WITH YOUR CALF'
+        : `CALVING SANCTUARY (LEVEL ${this.level}) — REUNITE WITH YOUR CALF`;
 
     this.add
-      .text(centerX, this.goalY - 95, bannerText, {
+      .text(this.goalX, this.goalY - 88, bannerText, {
         fontSize: '14px',
         fontStyle: 'bold',
         color: '#7dd3fc',
@@ -389,69 +423,75 @@ export class WhaleScene extends Phaser.Scene {
   }
 
   private spawnOceanMigrationField(): void {
-    const centerX = this.WORLD_WIDTH / 2;
     const { bloomSpacingY, ghostNetChance, seismicBuoyCount } =
       this.getDifficultyProfile();
 
-    // Guaranteed starting copepod bloom & nearby ghost net just ahead of spawn (both disguised until sonar sweeps them)
-    this.createCopepodBloom(centerX + 90, this.startY - 260);
-    this.createGhostNet(centerX - 135, this.startY - 310);
+    // Guaranteed starting copepod bloom & nearby ghost net near spawn (disguised until sonar sweeps them)
+    const introAngle = this.calfAngle + 0.35;
+    this.createCopepodBloom(
+      this.startX + Math.cos(introAngle) * 260,
+      this.startY + Math.sin(introAngle) * 260
+    );
+    this.createGhostNet(
+      this.startX + Math.cos(introAngle - 0.9) * 290,
+      this.startY + Math.sin(introAngle - 0.9) * 290
+    );
 
-    // Shipping corridor centers to keep clear of static buoys
-    const corridorCenters = this.getCorridorCenters();
+    const corridorPoints = this.getCorridorCenters();
     const isInsideCorridor = (y: number): boolean =>
-      corridorCenters.some((cy) => Math.abs(y - cy) < 210);
+      corridorPoints.some((c) => Math.abs(y - c.y) < 210);
 
-    // Spawn Copepod Blooms and Ghost Fishing Gear along the migration path
-    let yCursor = this.startY - 460;
-    while (yCursor > this.goalY + 260) {
-      if (!isInsideCorridor(yCursor)) {
-        // 1-2 Copepod Blooms in this band
-        const bloomX = centerX + Phaser.Math.Between(-440, 440);
-        this.createCopepodBloom(bloomX, yCursor);
+    // Populate 360-degree concentric rings around the starting position so every direction has food & traps
+    for (
+      let r = 420;
+      r <= this.targetRadiusPx + 350;
+      r += bloomSpacingY
+    ) {
+      const circumference = 2 * Math.PI * r;
+      const sectorCount = Math.max(6, Math.round(circumference / 560));
+      for (let s = 0; s < sectorCount; s++) {
+        const theta =
+          (s / sectorCount) * Math.PI * 2 +
+          Phaser.Math.FloatBetween(-0.18, 0.18);
+        const bx = this.startX + Math.cos(theta) * r;
+        const by = this.startY + Math.sin(theta) * r;
 
-        if (Math.random() < 0.38) {
-          const secondX =
-            bloomX > centerX
-              ? centerX - Phaser.Math.Between(180, 460)
-              : centerX + Phaser.Math.Between(180, 460);
-          this.createCopepodBloom(
-            secondX,
-            yCursor + Phaser.Math.Between(-70, 70)
-          );
+        if (isInsideCorridor(by)) continue;
+        if (Phaser.Math.Distance.Between(bx, by, this.goalX, this.goalY) < 260) {
+          continue;
         }
 
-        // Ghost fishing nets & lobster trap lines
+        this.createCopepodBloom(bx, by);
+
+        // Spawn 1-2 disguised ghost nets offset from the bloom
         const netCount = Math.random() < ghostNetChance ? 2 : 1;
         for (let n = 0; n < netCount; n++) {
-          let netX = centerX + Phaser.Math.Between(-500, 500);
-          // Avoid spawning directly on top of the bloom
-          if (Math.abs(netX - bloomX) < 110) {
-            netX += netX >= bloomX ? 140 : -140;
+          const offsetAngle =
+            theta +
+            (n === 0 ? 1 : -1) * Phaser.Math.FloatBetween(0.08, 0.2);
+          const netR = r + Phaser.Math.Between(-95, 95);
+          const nx = this.startX + Math.cos(offsetAngle) * netR;
+          const ny = this.startY + Math.sin(offsetAngle) * netR;
+          if (!isInsideCorridor(ny)) {
+            this.createGhostNet(nx, ny);
           }
-          const netY = yCursor + Phaser.Math.Between(-120, 120);
-          this.createGhostNet(netX, netY);
         }
       }
-
-      yCursor -= Phaser.Math.Between(
-        bloomSpacingY - 40,
-        bloomSpacingY + 50
-      );
     }
 
-    // Spawn Acoustic Seismic Survey Buoys (placed outside shipping corridors)
-    const spanY = this.startY - 700 - (this.goalY + 450);
+    // Spawn Acoustic Seismic Survey Buoys along the path between start and calf
     for (let i = 0; i < seismicBuoyCount; i++) {
-      const frac = (i + 0.5) / seismicBuoyCount;
-      let buoyY = this.startY - 700 - frac * spanY;
-      if (isInsideCorridor(buoyY)) {
-        buoyY -= 240;
+      const frac = (i + 0.5) / (seismicBuoyCount + 0.4);
+      const baseBx = this.startX + (this.goalX - this.startX) * frac;
+      let baseBy = this.startY + (this.goalY - this.startY) * frac;
+      if (isInsideCorridor(baseBy)) {
+        baseBy += 240;
       }
-      const buoyX =
-        i % 2 === 0
-          ? centerX - Phaser.Math.Between(180, 380)
-          : centerX + Phaser.Math.Between(180, 380);
+      const perpAngle = this.calfAngle + Math.PI / 2;
+      const sideOffset =
+        (i % 2 === 0 ? 1 : -1) * Phaser.Math.Between(160, 340);
+      const buoyX = baseBx + Math.cos(perpAngle) * sideOffset;
+      const buoyY = baseBy + Math.sin(perpAngle) * sideOffset;
 
       const sprite = this.add
         .image(buoyX, buoyY, 'seismic_buoy')
@@ -509,35 +549,36 @@ export class WhaleScene extends Phaser.Scene {
     });
   }
 
-  private getCorridorCenters(): number[] {
-    const totalSpan = this.startY - this.goalY;
-    // Level 1 has a single shipping corridor; Level 2+ introduces a second corridor
-    if (this.level === 1) {
-      return [this.goalY + totalSpan * 0.45];
-    }
-    return [this.goalY + totalSpan * 0.62, this.goalY + totalSpan * 0.3];
+  private getCorridorCenters(): { x: number; y: number }[] {
+    const fracs = this.level === 1 ? [0.5] : [0.35, 0.68];
+    return fracs.map((f) => ({
+      x: Math.round(this.startX + (this.goalX - this.startX) * f),
+      y: Math.round(this.startY + (this.goalY - this.startY) * f),
+    }));
   }
 
   private spawnShippingCorridors(): void {
-    const centerX = this.WORLD_WIDTH / 2;
     const corridorCenters = this.getCorridorCenters();
-    const loopHalfSpan = 880;
+    const loopHalfSpan = 1200;
 
-    for (const centerCorridorY of corridorCenters) {
+    for (const corridor of corridorCenters) {
+      const centerCorridorX = corridor.x;
+      const centerCorridorY = corridor.y;
+
       const laneGraphics = this.add.graphics().setDepth(2);
       laneGraphics.fillStyle(0x7f1d1d, 0.14);
-      laneGraphics.fillRect(0, centerCorridorY - 150, this.WORLD_WIDTH, 300);
+      laneGraphics.fillRect(0, centerCorridorY - 150, this.worldWidth, 300);
       laneGraphics.lineStyle(2, 0xf59e0b, 0.42);
       laneGraphics.lineBetween(
         0,
         centerCorridorY - 150,
-        this.WORLD_WIDTH,
+        this.worldWidth,
         centerCorridorY - 150
       );
       laneGraphics.lineBetween(
         0,
         centerCorridorY + 150,
-        this.WORLD_WIDTH,
+        this.worldWidth,
         centerCorridorY + 150
       );
 
@@ -546,13 +587,13 @@ export class WhaleScene extends Phaser.Scene {
       laneGraphics.lineBetween(
         0,
         centerCorridorY,
-        this.WORLD_WIDTH,
+        this.worldWidth,
         centerCorridorY
       );
 
       this.add
         .text(
-          centerX,
+          centerCorridorX,
           centerCorridorY - 130,
           '⚠ HIGH-DECIBEL SHIPPING CORRIDOR — NOISE MASKS SONAR • SHIP STRIKE IS FATAL ⚠',
           {
@@ -580,7 +621,7 @@ export class WhaleScene extends Phaser.Scene {
           y: centerCorridorY + 60,
           vx: -(160 + speedBoost),
           shipsInLane: shipsPerLane,
-          phaseOffset: 440,
+          phaseOffset: 540,
         },
       ];
 
@@ -589,7 +630,7 @@ export class WhaleScene extends Phaser.Scene {
         const spacing = totalLoopWidth / lane.shipsInLane;
         for (let s = 0; s < lane.shipsInLane; s++) {
           const startX =
-            centerX -
+            centerCorridorX -
             loopHalfSpan +
             ((s * spacing + lane.phaseOffset) % totalLoopWidth);
 
@@ -603,8 +644,8 @@ export class WhaleScene extends Phaser.Scene {
             x: startX,
             y: lane.y,
             vx: lane.vx,
-            loopMinX: centerX - loopHalfSpan,
-            loopMaxX: centerX + loopHalfSpan,
+            loopMinX: centerCorridorX - loopHalfSpan,
+            loopMaxX: centerCorridorX + loopHalfSpan,
             noiseTimer: s * 0.9,
             sprite,
             wakeGraphics,
@@ -735,25 +776,101 @@ export class WhaleScene extends Phaser.Scene {
       color: 0x38bdf8,
     });
 
-    // Schedule the Calf's answering echo pulse after 420ms
+    const trueAngle = Phaser.Math.Angle.Between(
+      this.whaleX,
+      this.whaleY,
+      this.calfSprite.x,
+      this.calfSprite.y
+    );
+    const distToCalfMeters =
+      Phaser.Math.Distance.Between(
+        this.whaleX,
+        this.whaleY,
+        this.calfSprite.x,
+        this.calfSprite.y
+      ) / this.PIXELS_PER_METER;
+    const beaconDuration = this.noiseMaskingTimer > 0 ? 1.6 : 3.8;
+
+    // Clear previous beacons when starting a new call
+    this.echoBeacons = [];
+
+    // Schedule the true Calf's answering echo pulse after 420ms
     this.time.delayedCall(420, () => {
       if (this.isEnding || !this.scene.isActive()) return;
-      const calfX = this.calfSprite.x;
-      const calfY = this.calfSprite.y;
 
+      // Spawn incoming wave from the calf's direction so player sees the wave washing toward them
+      const waveOriginDist = Math.min(
+        520,
+        Phaser.Math.Distance.Between(
+          this.whaleX,
+          this.whaleY,
+          this.calfSprite.x,
+          this.calfSprite.y
+        )
+      );
       this.acousticWaves.push({
-        x: calfX,
-        y: calfY,
+        x: this.whaleX + Math.cos(trueAngle) * waveOriginDist,
+        y: this.whaleY + Math.sin(trueAngle) * waveOriginDist,
         radius: 20,
-        maxRadius: 950,
-        speed: 560,
+        maxRadius: 760,
+        speed: 540,
         kind: 'calf_echo',
         color: 0xfbbf24,
       });
 
-      // Illuminate directional calf beacon arc above the whale
-      this.calfBeaconTimer = this.noiseMaskingTimer > 0 ? 1.4 : 3.8;
+      this.echoBeacons.push({
+        angle: trueAngle,
+        timer: beaconDuration,
+        maxTimer: beaconDuration,
+        isDecoy: false,
+      });
     });
+
+    // On Level 2+, if beyond DECOY_CLEAR_DISTANCE_METERS (420m) from the calf, spawn false decoy echoes
+    if (
+      this.level >= 2 &&
+      distToCalfMeters > this.DECOY_CLEAR_DISTANCE_METERS
+    ) {
+      const decoyCount = Math.min(3, this.level - 1);
+      for (let d = 0; d < decoyCount; d++) {
+        // Spread decoy angles away from the true calf direction
+        const baseSide = d % 2 === 0 ? 1 : -1;
+        const offsetRad =
+          baseSide *
+          Phaser.Math.FloatBetween(1.15 + d * 0.25, 2.35);
+        const decoyAngle = trueAngle + offsetRad;
+        const decoyDelay = d === 0 ? 330 : 510 + d * 70;
+
+        this.time.delayedCall(decoyDelay, () => {
+          if (this.isEnding || !this.scene.isActive()) return;
+          this.acousticWaves.push({
+            x: this.whaleX + Math.cos(decoyAngle) * 520,
+            y: this.whaleY + Math.sin(decoyAngle) * 520,
+            radius: 20,
+            maxRadius: 720,
+            speed: 520,
+            kind: 'calf_echo',
+            color: 0xf59e0b,
+          });
+
+          this.echoBeacons.push({
+            angle: decoyAngle,
+            timer: beaconDuration,
+            maxTimer: beaconDuration,
+            isDecoy: true,
+          });
+        });
+      }
+
+      if (!isInitialFreeCall) {
+        this.showFloatingNotice(
+          this.whaleX,
+          this.whaleY + 52,
+          `DECOY ECHOES ACTIVE (>${this.DECOY_CLEAR_DISTANCE_METERS}m FROM CALF)`,
+          '#fbbf24'
+        );
+      }
+    }
   }
 
   private showFloatingNotice(
@@ -793,23 +910,11 @@ export class WhaleScene extends Phaser.Scene {
     if (this.noiseMaskingTimer > 0) {
       this.noiseMaskingTimer = Math.max(0, this.noiseMaskingTimer - dt);
     }
-    if (this.calfBeaconTimer > 0) {
-      this.calfBeaconTimer = Math.max(0, this.calfBeaconTimer - dt);
-    }
-
-    // Periodic ambient calf call every 6.5s so player feels the distant calf
-    this.calfCallTimer += dt;
-    if (this.calfCallTimer > 6.5) {
-      this.calfCallTimer = 0;
-      this.acousticWaves.push({
-        x: this.calfSprite.x,
-        y: this.calfSprite.y,
-        radius: 18,
-        maxRadius: 700,
-        speed: 460,
-        kind: 'calf_echo',
-        color: 0xfbbf24,
-      });
+    for (let i = this.echoBeacons.length - 1; i >= 0; i--) {
+      this.echoBeacons[i].timer -= dt;
+      if (this.echoBeacons[i].timer <= 0) {
+        this.echoBeacons.splice(i, 1);
+      }
     }
 
     // Check SPACE for Echolocation Call
@@ -1134,13 +1239,13 @@ export class WhaleScene extends Phaser.Scene {
 
     this.whaleX = Phaser.Math.Clamp(
       this.whaleX + this.whaleVx * dt,
-      120,
-      this.WORLD_WIDTH - 120
+      160,
+      this.worldWidth - 160
     );
     this.whaleY = Phaser.Math.Clamp(
       this.whaleY + this.whaleVy * dt,
-      this.goalY - 60,
-      this.worldHeight - 100
+      160,
+      this.worldHeight - 160
     );
 
     const stepDist = Phaser.Math.Distance.Between(
@@ -1159,14 +1264,40 @@ export class WhaleScene extends Phaser.Scene {
       );
     }
 
-    const currentNorthMeters = Math.max(
-      0,
-      Math.round((this.startY - this.whaleY) / this.PIXELS_PER_METER)
+    const distToCalfPx = Phaser.Math.Distance.Between(
+      this.whaleX,
+      this.whaleY,
+      this.goalX,
+      this.goalY
     );
-    if (currentNorthMeters > this.maxNorthMetersInLevel) {
+    this.currentMetersToCalf = Math.max(
+      0,
+      Math.round(distToCalfPx / this.PIXELS_PER_METER)
+    );
+
+    // Notify on Level 2+ once the player gets close enough that decoy echoes drop out
+    if (
+      this.level >= 2 &&
+      !this.announcedDecoyLock &&
+      this.currentMetersToCalf <= this.DECOY_CLEAR_DISTANCE_METERS
+    ) {
+      this.announcedDecoyLock = true;
+      this.showFloatingNotice(
+        this.whaleX,
+        this.whaleY - 46,
+        'WITHIN 420m — DECOY ECHOES CLEARED!',
+        '#34d399'
+      );
+    }
+
+    const metersClosed = Math.max(
+      0,
+      this.migrationDistanceMeters - this.currentMetersToCalf
+    );
+    if (metersClosed > this.maxNorthMetersInLevel) {
       this.maxNorthMetersInLevel = Math.min(
         this.migrationDistanceMeters,
-        currentNorthMeters
+        metersClosed
       );
     }
   }
@@ -1246,14 +1377,14 @@ export class WhaleScene extends Phaser.Scene {
       }
     }
 
-    // 3. Reached Northern Sanctuary & Reunited with Calf
+    // 3. Reached Calving Sanctuary & Reunited with Calf
     const distToCalf = Phaser.Math.Distance.Between(
       this.whaleX,
       this.whaleY,
       this.calfSprite.x,
       this.calfSprite.y
     );
-    if (this.whaleY <= this.goalY + 55 || distToCalf < 85) {
+    if (distToCalf < 155) {
       this.maxNorthMetersInLevel = this.migrationDistanceMeters;
       this.triggerEndState(true);
     }
@@ -1308,23 +1439,25 @@ export class WhaleScene extends Phaser.Scene {
   private renderDarknessAndBeaconOverlay(): void {
     this.darknessOverlayGraphics.clear();
 
-    // Directional Calf Echo Beacon Arc around the whale when calf answers
-    if (this.calfBeaconTimer > 0) {
-      const angleToCalf = Phaser.Math.Angle.Between(
-        this.whaleX,
-        this.whaleY,
-        this.calfSprite.x,
-        this.calfSprite.y
+    // Directional Echo Beacon Arc(s) around the whale when calf (and any Level 2+ decoys) answer
+    for (const beacon of this.echoBeacons) {
+      const alpha = Phaser.Math.Clamp(
+        beacon.timer / Math.max(0.1, beacon.maxTimer * 0.65),
+        0.18,
+        0.92
       );
-      const alpha = Phaser.Math.Clamp(this.calfBeaconTimer / 2.5, 0.2, 0.9);
-      this.darknessOverlayGraphics.lineStyle(4, 0xfbbf24, alpha);
+      this.darknessOverlayGraphics.lineStyle(
+        4,
+        beacon.isDecoy ? 0xf59e0b : 0xfbbf24,
+        alpha
+      );
       this.darknessOverlayGraphics.beginPath();
       this.darknessOverlayGraphics.arc(
         this.whaleX,
         this.whaleY,
-        56,
-        angleToCalf - 0.45,
-        angleToCalf + 0.45,
+        62,
+        beacon.angle - 0.38,
+        beacon.angle + 0.38,
         false
       );
       this.darknessOverlayGraphics.strokePath();
@@ -1346,7 +1479,7 @@ export class WhaleScene extends Phaser.Scene {
       49
     );
     this.hudSubDistanceText.setText(
-      `/ ${this.migrationDistanceMeters}m (${pct}%)`
+      `/ ${this.migrationDistanceMeters}m (${this.currentMetersToCalf}m to calf)`
     );
 
     const cardX = 16;
