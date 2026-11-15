@@ -65,3 +65,49 @@ export const POLAR_BEAR_ASSETS: SpriteAssetSpec[] = [
     useExternalFile: false,
   },
 ];
+
+/**
+ * Central manifest for Episode 2 (North Atlantic Right Whale — "Drowned Echoes").
+ */
+export const WHALE_ASSETS: SpriteAssetSpec[] = [
+  {
+    key: 'whale_swim',
+    description: 'Top-down adult North Atlantic Right Whale with white head callosities & broad tail fluke (facing right / 0 rad)',
+    dimensions: '112x64 px per frame',
+    frames: 4,
+    filePath: '/assets/whale/whale_swim.png',
+    useExternalFile: false,
+  },
+  {
+    key: 'whale_calf',
+    description: 'Top-down Right Whale Calf waiting in the northern bay sanctuary',
+    dimensions: '64x38 px per frame',
+    frames: 2,
+    filePath: '/assets/whale/whale_calf.png',
+    useExternalFile: false,
+  },
+  {
+    key: 'copepod_bloom',
+    description: 'Glowing bioluminescent copepod / krill swarm for filter-feeding recovery',
+    dimensions: '64x64 px per frame',
+    frames: 2,
+    filePath: '/assets/whale/copepod_bloom.png',
+    useExternalFile: false,
+  },
+  {
+    key: 'ghost_net',
+    description: 'Drifting commercial lobster-pot buoy & ghost fishing net entanglement hazard',
+    dimensions: '76x56 px single frame',
+    frames: 1,
+    filePath: '/assets/whale/ghost_net.png',
+    useExternalFile: false,
+  },
+  {
+    key: 'seismic_buoy',
+    description: 'Offshore acoustic sonar / seismic survey buoy emitting high-decibel noise pulses',
+    dimensions: '48x48 px single frame',
+    frames: 1,
+    filePath: '/assets/whale/seismic_buoy.png',
+    useExternalFile: false,
+  },
+];

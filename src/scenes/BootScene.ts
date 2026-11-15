@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { POLAR_BEAR_ASSETS } from '../config/AssetManifest';
+import { POLAR_BEAR_ASSETS, WHALE_ASSETS } from '../config/AssetManifest';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -8,7 +8,7 @@ export class BootScene extends Phaser.Scene {
 
   preload(): void {
     // Load any external artist files that have been flipped to `useExternalFile: true`
-    for (const asset of POLAR_BEAR_ASSETS) {
+    for (const asset of [...POLAR_BEAR_ASSETS, ...WHALE_ASSETS]) {
       if (asset.useExternalFile) {
         this.load.image(asset.key, asset.filePath);
       }
@@ -20,10 +20,11 @@ export class BootScene extends Phaser.Scene {
     this.generateCubTexture();
     this.generateSealTextures();
     this.generateEnvironmentTextures();
+    this.generateWhaleTextures();
 
-    // Start on the PolarBearScene directly so the user can test gameplay right away,
-    // while keeping HubScene one click away via "World Habitat Map".
-    this.scene.start('PolarBearScene');
+    // Start on WhaleScene (Episode 2) directly so the user can test the new game right away,
+    // while keeping HubScene & Episode 1 one click away via "World Habitat Map".
+    this.scene.start('WhaleScene');
   }
 
   private generatePolarBearTextures(): void {
@@ -245,6 +246,169 @@ export class BootScene extends Phaser.Scene {
       g.fillRect(78, 12, 24, 26);
 
       g.generateTexture('industrial_ship', 146, 52);
+      g.destroy();
+    }
+  }
+
+  private generateWhaleTextures(): void {
+    // 1. Adult North Atlantic Right Whale (top-down, facing right / 0 rad, 112x64)
+    if (!this.textures.exists('whale_swim')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+
+      // Subtle bioluminescent / deep water aura
+      g.fillStyle(0x38bdf8, 0.14);
+      g.fillEllipse(60, 32, 92, 48);
+
+      // Broad tail flukes (left side, x=2..24)
+      g.fillStyle(0x0f172a, 1);
+      g.fillTriangle(4, 8, 26, 29, 12, 32);
+      g.fillTriangle(4, 56, 26, 35, 12, 32);
+      // Tail notch highlight
+      g.lineStyle(1.5, 0x475569, 0.7);
+      g.lineBetween(4, 8, 22, 28);
+      g.lineBetween(4, 56, 22, 36);
+
+      // Tail stock (peduncle)
+      g.fillStyle(0x1e293b, 1);
+      g.fillEllipse(32, 32, 30, 16);
+
+      // Paddle-shaped pectoral flippers
+      g.fillStyle(0x0f172a, 1);
+      g.fillEllipse(66, 10, 22, 11);
+      g.fillEllipse(66, 54, 22, 11);
+      g.lineStyle(1, 0x64748b, 0.5);
+      g.strokeEllipse(66, 10, 22, 11);
+      g.strokeEllipse(66, 54, 22, 11);
+
+      // Rotund dark slate-black body (Right Whales have broad backs and no dorsal fin)
+      g.fillStyle(0x0f172a, 1);
+      g.fillEllipse(64, 32, 68, 36);
+      g.fillStyle(0x1e293b, 1);
+      g.fillEllipse(66, 32, 58, 28);
+
+      // Broad arched head / rostrum
+      g.fillStyle(0x0f172a, 1);
+      g.fillEllipse(90, 32, 34, 26);
+
+      // Distinctive pale/rough callosity patches on rostrum & brow (signature of Right Whales)
+      g.fillStyle(0xe2e8f0, 0.92);
+      g.fillEllipse(98, 32, 11, 7); // Bonnet callosity
+      g.fillCircle(91, 25, 2.5); // Brow callosities
+      g.fillCircle(91, 39, 2.5);
+      g.fillCircle(103, 28, 2);
+      g.fillCircle(103, 36, 2);
+
+      // V-shaped blowholes behind head
+      g.fillStyle(0x64748b, 0.9);
+      g.fillCircle(80, 29.5, 1.6);
+      g.fillCircle(80, 34.5, 1.6);
+
+      g.generateTexture('whale_swim', 112, 64);
+      g.destroy();
+    }
+
+    // 2. Right Whale Calf (top-down, facing right / 0 rad, 64x38)
+    if (!this.textures.exists('whale_calf')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0x38bdf8, 0.22);
+      g.fillEllipse(34, 19, 52, 28);
+
+      // Tail flukes
+      g.fillStyle(0x1e293b, 1);
+      g.fillTriangle(3, 6, 16, 17, 8, 19);
+      g.fillTriangle(3, 32, 16, 21, 8, 19);
+
+      // Flippers
+      g.fillEllipse(38, 6, 13, 6);
+      g.fillEllipse(38, 32, 13, 6);
+
+      // Body
+      g.fillStyle(0x1e293b, 1);
+      g.fillEllipse(36, 19, 40, 21);
+      g.fillStyle(0x334155, 1);
+      g.fillEllipse(38, 19, 32, 16);
+
+      // Calf head callosities
+      g.fillStyle(0xf1f5f9, 0.9);
+      g.fillEllipse(54, 19, 7, 4.5);
+      g.fillCircle(49, 15, 1.6);
+      g.fillCircle(49, 23, 1.6);
+
+      g.generateTexture('whale_calf', 64, 38);
+      g.destroy();
+    }
+
+    // 3. Bioluminescent Copepod / Krill Bloom (64x64)
+    if (!this.textures.exists('copepod_bloom')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0xf472b6, 0.18);
+      g.fillCircle(32, 32, 28);
+      g.fillStyle(0xfb7185, 0.28);
+      g.fillCircle(30, 30, 20);
+
+      // Individual glowing zooplankton specks
+      const pts = [
+        [22, 24],
+        [36, 20],
+        [42, 30],
+        [28, 38],
+        [18, 34],
+        [34, 42],
+        [26, 28],
+        [38, 34],
+        [31, 23],
+        [45, 25],
+        [20, 41],
+      ];
+      for (const [px, py] of pts) {
+        g.fillStyle(0xfda4af, 0.9);
+        g.fillCircle(px, py, 2.2);
+        g.fillStyle(0xfef08a, 0.95);
+        g.fillCircle(px + 1, py - 1, 1.1);
+      }
+
+      g.generateTexture('copepod_bloom', 64, 64);
+      g.destroy();
+    }
+
+    // 4. Drifting Ghost Fishing Net & Lobster Pot Buoys (76x56)
+    if (!this.textures.exists('ghost_net')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      // Tangled synthetic mesh webbing
+      g.lineStyle(1.5, 0x94a3b8, 0.65);
+      for (let x = 10; x <= 64; x += 9) {
+        g.lineBetween(x, 10, x + 6, 46);
+      }
+      for (let y = 12; y <= 44; y += 8) {
+        g.lineBetween(10, y, 66, y + 4);
+      }
+      // Heavy leadline border rope
+      g.lineStyle(2.5, 0xcbd5e1, 0.85);
+      g.strokeRoundedRect(10, 12, 56, 32, 8);
+
+      // High-visibility orange/red commercial trap buoys
+      g.fillStyle(0xf97316, 1);
+      g.fillCircle(14, 16, 6);
+      g.fillCircle(62, 38, 6);
+      g.fillStyle(0xfef08a, 1);
+      g.fillCircle(38, 12, 4.5);
+
+      g.generateTexture('ghost_net', 76, 56);
+      g.destroy();
+    }
+
+    // 5. Industrial Seismic Survey / Sonar Buoy (48x48)
+    if (!this.textures.exists('seismic_buoy')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0xef4444, 0.25);
+      g.fillCircle(24, 24, 22);
+      g.fillStyle(0x334155, 1);
+      g.fillCircle(24, 24, 14);
+      g.lineStyle(2.5, 0xf59e0b, 1);
+      g.strokeCircle(24, 24, 14);
+      g.fillStyle(0xef4444, 1);
+      g.fillCircle(24, 24, 5);
+      g.generateTexture('seismic_buoy', 48, 48);
       g.destroy();
     }
   }

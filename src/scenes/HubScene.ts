@@ -30,8 +30,8 @@ const EPISODES: EpisodeCard[] = [
     species: 'North Atlantic Right Whale',
     status: 'CRITICALLY ENDANGERED — <360 remaining',
     mechanicSummary:
-      'Press SPACE to sing and follow your calf’s echo through dark water. Commercial shipping lanes & whaling sonar flood the screen with blinding acoustic noise.',
-    playable: false,
+      'Press SPACE to sing and follow your calf’s echo through dark water. Commercial shipping lanes, ghost fishing gear & seismic sonar flood the sea with blinding noise.',
+    playable: true,
     accentColor: 0x818cf8,
   },
   {
@@ -175,7 +175,9 @@ export class HubScene extends Phaser.Scene {
       .text(
         0,
         btnY + 1,
-        ep.playable ? '▶  PLAY EPISODE 1' : 'PLANNED FOR EPISODE ' + (EPISODES.indexOf(ep) + 1),
+        ep.playable
+          ? `▶  PLAY EPISODE ${EPISODES.indexOf(ep) + 1}`
+          : 'PLANNED FOR EPISODE ' + (EPISODES.indexOf(ep) + 1),
         {
           fontSize: '12px',
           fontStyle: 'bold',

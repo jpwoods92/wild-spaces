@@ -160,6 +160,12 @@ export class PolarBearScene extends Phaser.Scene {
   create(): void {
     this.resetLevelEntities();
 
+    const subtitleEl = document.querySelector('.brand-subtitle');
+    if (subtitleEl) {
+      subtitleEl.textContent =
+        'Episode 1: The Thinning North (Polar Bear)';
+    }
+
     // 1. World Ocean Background & Currents
     this.cameras.main.setBounds(0, 0, this.WORLD_WIDTH, this.worldHeight);
     this.drawOceanBackdrop();
