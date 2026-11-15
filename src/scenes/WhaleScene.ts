@@ -3,6 +3,10 @@ import {
   formatDuration,
   recordLevelCompletion,
 } from '../utils/LeaderboardStore';
+import {
+  getFoodScarcityProfile,
+  shouldSpawnFoodAtNode,
+} from '../utils/FoodScarcitySchedule';
 import { ShippingCorridorManager } from '../systems/ShippingCorridorManager';
 import {
   EpisodeUIManager,
@@ -305,6 +309,7 @@ export class WhaleScene extends Phaser.Scene {
   private getDifficultyProfile(): {
     bloomSpacingY: number;
     bloomSpawnChance: number;
+    sectorArcSpacingPx: number;
     ghostNetChance: number;
     routeBuoyCount: number;
     ambientBuoyCount: number;
@@ -316,10 +321,10 @@ export class WhaleScene extends Phaser.Scene {
     maskedDecayMultiplier: number;
   } {
     const lvlOffset = this.level - 1;
-    // Concentric rings are spaced wider apart (starting at 480px on Level 1 up to 720px)
-    const bloomSpacingY = Math.min(720, 480 + lvlOffset * 55);
-    // Only a fraction of sector nodes contain a Copepod Bloom (42% on Level 1 down to 20% floor)
-    const bloomSpawnChance = Math.max(0.2, 0.42 - lvlOffset * 0.05);
+    const foodScarcity = getFoodScarcityProfile(this.level);
+    const bloomSpacingY = foodScarcity.bandSpacingPx;
+    const bloomSpawnChance = foodScarcity.foodSpawnChance;
+    const sectorArcSpacingPx = foodScarcity.sectorArcSpacingPx;
     // Ghost net density increases up to a cap
     const ghostNetChance = Math.min(0.9, 0.55 + lvlOffset * 0.08);
     // Seismic survey buoys along the calf route start at 4 on Level 1 and increase by +3 per level (up to 19)
@@ -338,6 +343,7 @@ export class WhaleScene extends Phaser.Scene {
     return {
       bloomSpacingY,
       bloomSpawnChance,
+      sectorArcSpacingPx,
       ghostNetChance,
       routeBuoyCount,
       ambientBuoyCount,
@@ -412,7 +418,7 @@ export class WhaleScene extends Phaser.Scene {
   private spawnOceanMigrationField(): void {
     const {
       bloomSpacingY,
-      bloomSpawnChance,
+      sectorArcSpacingPx,
       ghostNetChance,
       routeBuoyCount,
       ambientBuoyCount,
@@ -429,15 +435,18 @@ export class WhaleScene extends Phaser.Scene {
     const isInsideCorridor = (y: number): boolean =>
       corridorPoints.some((c) => Math.abs(y - c.y) < 210);
 
-    // Populate 360-degree concentric rings around the starting position with scarce food & traps
+    // Populate 360-degree concentric rings around the starting position using shared food scarcity schedule
+    let nodesSinceLastBloom = 0;
     for (
-      let r = 520;
+      let r = 560;
       r <= this.targetRadiusPx + 350;
       r += bloomSpacingY
     ) {
       const circumference = 2 * Math.PI * r;
-      const sectorCount = Math.max(5, Math.round(circumference / 820));
-      let spawnedBloomInRing = false;
+      const sectorCount = Math.max(
+        4,
+        Math.round(circumference / sectorArcSpacingPx)
+      );
 
       for (let s = 0; s < sectorCount; s++) {
         const theta =
@@ -451,14 +460,10 @@ export class WhaleScene extends Phaser.Scene {
           continue;
         }
 
-        // Only spawn a copepod bloom in a subset of sectors (ensuring at least 1 per ring)
-        const isLastSector = s === sectorCount - 1;
-        if (
-          Math.random() < bloomSpawnChance ||
-          (!spawnedBloomInRing && isLastSector)
-        ) {
+        nodesSinceLastBloom++;
+        if (shouldSpawnFoodAtNode(this.level, nodesSinceLastBloom)) {
           this.createCopepodBloom(bx, by);
-          spawnedBloomInRing = true;
+          nodesSinceLastBloom = 0;
         }
 
         // Spawn 1-2 disguised ghost nets in the sector
