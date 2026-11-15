@@ -1,4 +1,65 @@
-import Phaser from 'phaser';
+import type Phaser from 'phaser';
+
+/**
+ * Computes the off-screen horizontal half-span from the camera center,
+ * guaranteeing at least a 380px buffer outside both left and right edges of the viewport.
+ */
+export function computeOffscreenWrapHalfSpan(viewportWidth: number): number {
+  return Math.max(1350, viewportWidth * 0.5 + 380);
+}
+
+/**
+ * Wraps a vessel's X coordinate relative to the camera center so ships always
+ * enter and exit strictly off-screen.
+ */
+export function wrapShipXToCamera(
+  shipX: number,
+  camCenterX: number,
+  halfSpan: number
+): number {
+  const span = halfSpan * 2;
+  if (shipX > camCenterX + halfSpan) {
+    return shipX - span;
+  }
+  if (shipX < camCenterX - halfSpan) {
+    return shipX + span;
+  }
+  return shipX;
+}
+
+/**
+ * Checks whether the player's position collides with a vessel's hull bounding box.
+ */
+export function isShipHullCollision(
+  playerX: number,
+  playerY: number,
+  shipX: number,
+  shipY: number,
+  hitHalfWidth = 74,
+  hitHalfHeight = 30
+): boolean {
+  return (
+    Math.abs(playerX - shipX) < hitHalfWidth &&
+    Math.abs(playerY - shipY) < hitHalfHeight
+  );
+}
+
+/**
+ * Checks whether the player is inside the churning stern wake zone behind a moving vessel.
+ */
+export function isSternWakeOverlap(
+  playerX: number,
+  playerY: number,
+  shipX: number,
+  shipY: number,
+  shipVx: number
+): boolean {
+  const dir = shipVx > 0 ? -1 : 1;
+  const sternX = shipX + dir * 62;
+  const wakeDeltaX = (playerX - sternX) * dir;
+  const dy = Math.abs(playerY - shipY);
+  return wakeDeltaX > 0 && wakeDeltaX < 165 && dy < 34;
+}
 
 export interface ManagedShip {
   x: number;
@@ -46,6 +107,10 @@ export class ShippingCorridorManager {
     this.scene = scene;
   }
 
+  public getShips(): readonly ManagedShip[] {
+    return this.ships;
+  }
+
   public clear(): void {
     for (const ship of this.ships) {
       ship.sprite.destroy();
@@ -72,9 +137,8 @@ export class ShippingCorridorManager {
     } = config;
 
     // Initial loop half-span covers even ultra-wide viewports plus a 380px off-screen buffer
-    const initialHalfSpan = Math.max(
-      1350,
-      this.scene.scale.width * 0.5 + 380
+    const initialHalfSpan = computeOffscreenWrapHalfSpan(
+      this.scene.scale.width
     );
     const totalLoopWidth = initialHalfSpan * 2;
 
@@ -182,17 +246,14 @@ export class ShippingCorridorManager {
     const cam = this.scene.cameras.main;
     const camCenterX = cam.scrollX + cam.width * 0.5;
     // Always keep the wrap boundary at least 380px beyond the left and right edges of the screen
-    const dynamicHalfSpan = Math.max(1350, cam.width * 0.5 + 380);
-    const dynamicSpan = dynamicHalfSpan * 2;
+    const dynamicHalfSpan = computeOffscreenWrapHalfSpan(cam.width);
 
     for (const ship of this.ships) {
-      ship.x += ship.vx * dt;
-
-      if (ship.x > camCenterX + dynamicHalfSpan) {
-        ship.x -= dynamicSpan;
-      } else if (ship.x < camCenterX - dynamicHalfSpan) {
-        ship.x += dynamicSpan;
-      }
+      ship.x = wrapShipXToCamera(
+        ship.x + ship.vx * dt,
+        camCenterX,
+        dynamicHalfSpan
+      );
       ship.sprite.setPosition(ship.x, ship.y);
 
       // Optional periodic acoustic / wake pulse callback
@@ -234,18 +295,25 @@ export class ShippingCorridorManager {
       );
 
       // Direct hull collision check
-      const dx = Math.abs(playerX - ship.x);
-      const dy = Math.abs(playerY - ship.y);
-      if (dx < hitHalfWidth && dy < hitHalfHeight) {
+      if (
+        isShipHullCollision(
+          playerX,
+          playerY,
+          ship.x,
+          ship.y,
+          hitHalfWidth,
+          hitHalfHeight
+        )
+      ) {
         return true;
       }
 
       // Optional stern wake turbulence callback
-      if (onWakeOverlap) {
-        const wakeDeltaX = (playerX - sternX) * dir;
-        if (wakeDeltaX > 0 && wakeDeltaX < 165 && dy < 34) {
-          onWakeOverlap(ship.vx, dt);
-        }
+      if (
+        onWakeOverlap &&
+        isSternWakeOverlap(playerX, playerY, ship.x, ship.y, ship.vx)
+      ) {
+        onWakeOverlap(ship.vx, dt);
       }
     }
 

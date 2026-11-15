@@ -30,9 +30,18 @@ export function formatHudClock(seconds: number): string {
   return `${minStr}:${secStr}`;
 }
 
+function getStorage(): Storage | undefined {
+  if (typeof globalThis !== 'undefined' && 'localStorage' in globalThis) {
+    return globalThis.localStorage;
+  }
+  return undefined;
+}
+
 function loadAllEntries(): LeaderboardEntry[] {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const storage = getStorage();
+    if (!storage) return [];
+    const raw = storage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -43,9 +52,19 @@ function loadAllEntries(): LeaderboardEntry[] {
 
 function saveAllEntries(entries: LeaderboardEntry[]): void {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    const storage = getStorage();
+    if (!storage) return;
+    storage.setItem(STORAGE_KEY, JSON.stringify(entries));
   } catch {
     // Ignore localStorage quota/privacy errors
+  }
+}
+
+export function clearLeaderboardStorage(): void {
+  try {
+    getStorage()?.removeItem(STORAGE_KEY);
+  } catch {
+    // Ignore storage errors
   }
 }
 

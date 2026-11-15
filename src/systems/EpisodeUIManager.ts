@@ -1,5 +1,9 @@
-import Phaser from 'phaser';
-import { formatHudClock } from '../utils/LeaderboardStore';
+import type Phaser from 'phaser';
+import { formatHudClock } from '../utils/LeaderboardStore.ts';
+
+export function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
 
 export interface EpisodeHudConfig {
   accentColor: number;
@@ -171,7 +175,7 @@ export class EpisodeUIManager {
 
   public renderTopHUD(state: TopCardRenderState): void {
     const { width, height } = this.scene.scale;
-    const clampedPct = Phaser.Math.Clamp(state.progressPct, 0, 1);
+    const clampedPct = clamp(state.progressPct, 0, 1);
 
     this.hudLevelLabel.setText(
       `${state.headerPrefix}  •  ⏱ ${formatHudClock(state.elapsedSeconds)}`
@@ -245,7 +249,7 @@ export class EpisodeUIManager {
     this.worldUiGraphics.fillRoundedRect(bx - 2, by - 2, barW + 4, barH + 4, 4);
 
     // Locked / Depleted Max Stamina Ceiling
-    const clampedMax = Phaser.Math.Clamp(state.maxStamina / 100, 0.2, 1);
+    const clampedMax = clamp(state.maxStamina / 100, 0.2, 1);
     if (clampedMax < 0.995) {
       const capX = bx + barW * clampedMax;
       const lostW = bx + barW - capX;
@@ -256,7 +260,7 @@ export class EpisodeUIManager {
     }
 
     // Current Stamina Fill
-    const staminaPct = Phaser.Math.Clamp(state.stamina / 100, 0, clampedMax);
+    const staminaPct = clamp(state.stamina / 100, 0, clampedMax);
     if (staminaPct > 0) {
       this.worldUiGraphics.fillStyle(state.primaryFillColor, 0.96);
       this.worldUiGraphics.fillRoundedRect(
@@ -272,7 +276,7 @@ export class EpisodeUIManager {
     if (state.secondaryBar) {
       const topBarH = 5;
       const topBarY = by - 14;
-      const pct = Phaser.Math.Clamp(state.secondaryBar.pct, 0, 1);
+      const pct = clamp(state.secondaryBar.pct, 0, 1);
 
       this.worldUiGraphics.fillStyle(0x040d17, 0.9);
       this.worldUiGraphics.fillRoundedRect(
@@ -333,6 +337,6 @@ export function getStaminaSpeedMultiplier(
   maxStamina: number,
   minFactor = 0.52
 ): number {
-  const normalized = Phaser.Math.Clamp((maxStamina - 20) / 80, 0, 1);
+  const normalized = clamp((maxStamina - 20) / 80, 0, 1);
   return minFactor + (1 - minFactor) * normalized;
 }
