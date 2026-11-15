@@ -7,10 +7,12 @@ interface IceFloe {
   surfaceGraphics: Phaser.GameObjects.Graphics;
   crackGraphics: Phaser.GameObjects.Graphics;
   points: Phaser.Math.Vector2[];
+  baseX: number;
+  baseY: number;
   baseRadius: number;
   currentScale: number;
-  meltRate: number; // baseline passive melt per second
-  weightMeltRate: number; // extra melt when bear stands on it
+  standTimer: number; // seconds bear has stood on this floe
+  standTimeLimit: number; // breaks apart when standTimer >= standTimeLimit
   vx: number; // horizontal ocean drift
   minX: number;
   maxX: number;
@@ -51,6 +53,7 @@ export class PolarBearScene extends Phaser.Scene {
 
   // Survival meters (0 - 100)
   private warmth = 100;
+  private maxWarmth = 100;
   private stamina = 100;
   private isOnIce = true;
   private currentFloe: IceFloe | null = null;
@@ -171,6 +174,7 @@ export class PolarBearScene extends Phaser.Scene {
     this.bearVy = 0;
     this.bearAngle = -Math.PI / 2;
     this.warmth = 100;
+    this.maxWarmth = 100;
     this.stamina = 100;
     this.isOnIce = true;
     this.currentFloe = null;
@@ -228,67 +232,94 @@ export class PolarBearScene extends Phaser.Scene {
       .setDepth(2);
   }
 
+  private canPlaceFloe(x: number, y: number, radius: number): boolean {
+    for (const existing of this.floes) {
+      const minSeparation =
+        (existing.baseRadius + radius) * 1.28 + 85;
+      const dist = Phaser.Math.Distance.Between(
+        x,
+        y,
+        existing.baseX,
+        existing.baseY
+      );
+      if (dist < minSeparation) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   private generateMigrationRoute(): void {
     let nextId = 1;
 
-    // 1. Starting Southern Floe (stable enough to orient, but begins melting)
+    // 1. Starting Southern Floe (gives you ~7.5s to orient before it cracks & shatters)
     this.createIceFloe(
       nextId++,
       this.WORLD_WIDTH / 2,
       this.START_Y,
-      135,
-      0.006,
-      0.02,
+      125,
+      7.5,
       0
     );
 
-    // 2. Stepping-stone floes from South (Y=3680) to North (Y=680)
-    let yCursor = 3680;
-    while (yCursor > 680) {
-      // Skip right inside the narrowest center of the shipping lane to force a tense crossing
-      const inShippingLane = yCursor > 2020 && yCursor < 2190;
-      const floesInRow = inShippingLane
-        ? 1
-        : Phaser.Math.Between(2, 3);
+    // 2. Sparse stepping-stone floes from South (Y=3580) to North (Y=740)
+    // Much larger open-water gaps (~310px to 380px vertically) and mostly 1 floe per row
+    let yCursor = 3580;
+    let prevX = this.WORLD_WIDTH / 2;
 
-      const rowWidth = 1050;
-      const startX = (this.WORLD_WIDTH - rowWidth) / 2;
+    while (yCursor > 740) {
+      const inShippingLane = yCursor > 1960 && yCursor < 2240;
+      // Mostly 1 floe per vertical band (occasionally 2 well-separated floes outside shipping lane)
+      const floesInBand =
+        inShippingLane || Math.random() < 0.62 ? 1 : 2;
 
-      for (let i = 0; i < floesInRow; i++) {
-        const slotX =
-          floesInRow === 1
-            ? Phaser.Math.Between(520, 1080)
-            : startX +
-              (i * rowWidth) / (floesInRow - 1) +
-              Phaser.Math.Between(-95, 95);
-
-        const fy = yCursor + Phaser.Math.Between(-45, 45);
-        // Southern floes are smaller or melt faster; medium floes occasionally hold seals
-        const baseRadius = Phaser.Math.Between(68, 128);
-        const passiveMelt = Phaser.Math.FloatBetween(0.003, 0.008);
-        const weightMelt =
-          baseRadius < 88
-            ? Phaser.Math.FloatBetween(0.048, 0.075)
-            : Phaser.Math.FloatBetween(0.022, 0.038);
-        const driftVx = Phaser.Math.FloatBetween(-24, 24);
-
-        const floe = this.createIceFloe(
-          nextId++,
-          slotX,
-          fy,
-          baseRadius,
-          passiveMelt,
-          weightMelt,
-          driftVx
+      for (let i = 0; i < floesInBand; i++) {
+        const baseRadius = Phaser.Math.Between(74, 112);
+        // Smaller floes break apart in ~3.6s of standing; larger ones in ~5.2s
+        const standTimeLimit = Phaser.Math.Linear(
+          3.6,
+          5.2,
+          (baseRadius - 74) / (112 - 74)
         );
 
-        // Spawn a Ringed Seal on ~38% of floes that are medium/large
-        if (baseRadius >= 85 && Math.random() < 0.42) {
-          this.spawnSealOnFloe(floe);
+        let placedFloe: IceFloe | null = null;
+        for (let attempt = 0; attempt < 16; attempt++) {
+          const candidateX =
+            floesInBand === 1
+              ? Phaser.Math.Clamp(
+                  prevX + Phaser.Math.Between(-340, 340),
+                  280,
+                  this.WORLD_WIDTH - 280
+                )
+              : i === 0
+              ? Phaser.Math.Between(300, 640)
+              : Phaser.Math.Between(960, 1300);
+
+          const candidateY = yCursor + Phaser.Math.Between(-30, 30);
+
+          if (this.canPlaceFloe(candidateX, candidateY, baseRadius)) {
+            const driftVx = Phaser.Math.FloatBetween(-22, 22);
+            placedFloe = this.createIceFloe(
+              nextId++,
+              candidateX,
+              candidateY,
+              baseRadius,
+              standTimeLimit,
+              driftVx
+            );
+            prevX = candidateX;
+            break;
+          }
+        }
+
+        // Since floes are scarce and eating seals is the ONLY way to recover Max Warmth,
+        // spawn a Ringed Seal on ~62% of stepping-stone floes
+        if (placedFloe && Math.random() < 0.62) {
+          this.spawnSealOnFloe(placedFloe);
         }
       }
 
-      yCursor -= Phaser.Math.Between(185, 235);
+      yCursor -= Phaser.Math.Between(310, 380);
     }
 
     // 3. Permanent Northern Pack Ice Sanctuary (Top of map)
@@ -297,8 +328,7 @@ export class PolarBearScene extends Phaser.Scene {
       this.WORLD_WIDTH / 2,
       this.SANCTUARY_Y - 30,
       360,
-      0,
-      0,
+      99999,
       0,
       true
     );
@@ -318,7 +348,7 @@ export class PolarBearScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(16);
 
-    this.currentFloe = sanctuary; // Will be updated on first frame
+    this.currentFloe = sanctuary; // Updated on first frame
   }
 
   private createIceFloe(
@@ -326,8 +356,7 @@ export class PolarBearScene extends Phaser.Scene {
     x: number,
     y: number,
     radius: number,
-    meltRate: number,
-    weightMeltRate: number,
+    standTimeLimit: number,
     vx: number,
     isSanctuary = false
   ): IceFloe {
@@ -391,13 +420,15 @@ export class PolarBearScene extends Phaser.Scene {
       surfaceGraphics,
       crackGraphics,
       points,
+      baseX: x,
+      baseY: y,
       baseRadius: radius,
       currentScale: 1,
-      meltRate,
-      weightMeltRate,
+      standTimer: 0,
+      standTimeLimit,
       vx,
-      minX: 180,
-      maxX: this.WORLD_WIDTH - 180,
+      minX: 220,
+      maxX: this.WORLD_WIDTH - 220,
       isSanctuary,
       crackStage: 0,
     };
@@ -408,17 +439,72 @@ export class PolarBearScene extends Phaser.Scene {
 
   private drawFloeCracks(floe: IceFloe, stage: number): void {
     floe.crackGraphics.clear();
-    floe.crackGraphics.lineStyle(2, 0x0284c7, 0.75);
+    if (stage <= 0) return;
 
-    const count = stage * 2;
+    floe.crackGraphics.lineStyle(
+      stage >= 3 ? 3.2 : 2.2,
+      stage >= 3 ? 0x0369a1 : 0x0284c7,
+      0.88
+    );
+
+    const count = stage * 3;
     for (let i = 0; i < count; i++) {
-      const p1 = floe.points[(i * 3) % floe.points.length];
+      const p1 = floe.points[(i * 2) % floe.points.length];
       floe.crackGraphics.beginPath();
-      floe.crackGraphics.moveTo(p1.x * 0.9, p1.y * 0.9);
-      floe.crackGraphics.lineTo(p1.x * 0.35 + (i % 2 === 0 ? 12 : -12), p1.y * 0.35);
+      floe.crackGraphics.moveTo(p1.x * 0.94, p1.y * 0.94);
+      floe.crackGraphics.lineTo(
+        p1.x * 0.45 + (i % 2 === 0 ? 14 : -14),
+        p1.y * 0.45 + (i % 3 === 0 ? -10 : 10)
+      );
       floe.crackGraphics.lineTo(0, 0);
       floe.crackGraphics.strokePath();
     }
+  }
+
+  private shatterIceFloe(floe: IceFloe): void {
+    const cx = floe.container.x;
+    const cy = floe.container.y;
+    this.spawnSplashRing(cx, cy, 1.5);
+    this.spawnFloatingText(cx, cy, 'ICE BROKE APART!', '#f87171');
+
+    // Spawn 5 breaking ice chunks that drift outward and sink
+    const shardCount = 5;
+    for (let i = 0; i < shardCount; i++) {
+      const angle = (i / shardCount) * Math.PI * 2 + Math.random() * 0.4;
+      const dist = floe.baseRadius * floe.currentScale * 0.38;
+      const shard = this.add
+        .graphics({
+          x: cx + Math.cos(angle) * dist,
+          y: cy + Math.sin(angle) * dist,
+        })
+        .setDepth(5);
+
+      shard.fillStyle(0xe2e8f0, 0.9);
+      shard.lineStyle(2, 0x38bdf8, 0.8);
+      const r = floe.baseRadius * floe.currentScale * 0.34;
+      shard.beginPath();
+      shard.moveTo(-r * 0.8, -r * 0.5);
+      shard.lineTo(r * 0.9, -r * 0.3);
+      shard.lineTo(r * 0.5, r * 0.8);
+      shard.lineTo(-r * 0.6, r * 0.6);
+      shard.closePath();
+      shard.fillPath();
+      shard.strokePath();
+
+      this.tweens.add({
+        targets: shard,
+        x: shard.x + Math.cos(angle) * 55,
+        y: shard.y + Math.sin(angle) * 55,
+        scaleX: 0.15,
+        scaleY: 0.15,
+        alpha: 0,
+        rotation: (i % 2 === 0 ? 1 : -1) * 0.9,
+        duration: 750,
+        onComplete: () => shard.destroy(),
+      });
+    }
+
+    floe.container.destroy();
   }
 
   private spawnSealOnFloe(floe: IceFloe): void {
@@ -593,30 +679,89 @@ export class PolarBearScene extends Phaser.Scene {
   }
 
   private updateIceFloes(dt: number): void {
+    // 1. Move floes horizontally & bounce off world boundaries
+    for (const floe of this.floes) {
+      if (floe.isSanctuary) continue;
+      floe.baseX += floe.vx * dt;
+      if (floe.baseX < floe.minX) {
+        floe.baseX = floe.minX;
+        floe.vx = Math.abs(floe.vx);
+      } else if (floe.baseX > floe.maxX) {
+        floe.baseX = floe.maxX;
+        floe.vx = -Math.abs(floe.vx);
+      }
+    }
+
+    // 2. Prevent any two ice floes from intersecting while drifting
+    for (let i = 0; i < this.floes.length; i++) {
+      const a = this.floes[i];
+      if (a.isSanctuary) continue;
+      for (let j = i + 1; j < this.floes.length; j++) {
+        const b = this.floes[j];
+        if (b.isSanctuary) continue;
+
+        const dy = Math.abs(a.baseY - b.baseY);
+        const minYDist =
+          (a.baseRadius * a.currentScale + b.baseRadius * b.currentScale) *
+            0.88 +
+          24;
+        if (dy >= minYDist) continue;
+
+        const dx = b.baseX - a.baseX;
+        const minXDist =
+          (a.baseRadius * a.currentScale + b.baseRadius * b.currentScale) *
+            1.18 +
+          32;
+
+        if (Math.abs(dx) < minXDist) {
+          const overlap = (minXDist - Math.abs(dx)) * 0.5;
+          const sign = dx >= 0 ? 1 : -1;
+          a.baseX -= sign * overlap;
+          b.baseX += sign * overlap;
+          // Bounce horizontal velocities away from each other
+          const speedA = Math.abs(a.vx) || 16;
+          const speedB = Math.abs(b.vx) || 16;
+          a.vx = -sign * speedA;
+          b.vx = sign * speedB;
+        }
+      }
+    }
+
+    // 3. Apply standing stress, cracking, shudder, and breaking apart
     for (let i = this.floes.length - 1; i >= 0; i--) {
       const floe = this.floes[i];
       if (floe.isSanctuary) continue;
 
-      // Drift horizontally
-      floe.container.x += floe.vx * dt;
-      if (floe.container.x < floe.minX || floe.container.x > floe.maxX) {
-        floe.vx *= -1;
+      const bearOnThis = this.currentFloe?.id === floe.id;
+      if (bearOnThis) {
+        floe.standTimer += dt;
       }
 
-      // Passive thermal melt + extra melt if bear is standing on it
-      const bearOnThis = this.currentFloe?.id === floe.id;
-      const meltDelta =
-        (floe.meltRate + (bearOnThis ? floe.weightMeltRate : 0)) * dt;
-      floe.currentScale = Math.max(0.18, floe.currentScale - meltDelta);
+      const stressRatio = Phaser.Math.Clamp(
+        floe.standTimer / floe.standTimeLimit,
+        0,
+        1
+      );
+
+      // Shrink slightly as cracks widen under the bear's weight
+      floe.currentScale = 1.0 - stressRatio * 0.38;
       floe.container.setScale(floe.currentScale);
+
+      // Shudder when close to breaking apart (>65% stress)
+      const shudderX =
+        bearOnThis && stressRatio > 0.65
+          ? Math.sin(this.time.now * 0.055) * 3.5
+          : 0;
+      floe.container.x = floe.baseX + shudderX;
+      floe.container.y = floe.baseY;
 
       // Progressive visible cracking
       const targetCrackStage =
-        floe.currentScale < 0.42
+        stressRatio >= 0.72
           ? 3
-          : floe.currentScale < 0.65
+          : stressRatio >= 0.44
           ? 2
-          : floe.currentScale < 0.85
+          : stressRatio >= 0.16
           ? 1
           : 0;
 
@@ -625,10 +770,9 @@ export class PolarBearScene extends Phaser.Scene {
         this.drawFloeCracks(floe, targetCrackStage);
       }
 
-      // Collapse floe when too small
-      if (floe.currentScale <= 0.22) {
-        this.spawnSplashRing(floe.container.x, floe.container.y, 1.4);
-        floe.container.destroy();
+      // Break apart completely after standing on it for too long
+      if (floe.standTimer >= floe.standTimeLimit) {
+        this.shatterIceFloe(floe);
         this.floes.splice(i, 1);
         this.floesCollapsed++;
         if (this.currentFloe?.id === floe.id) {
@@ -784,10 +928,13 @@ export class PolarBearScene extends Phaser.Scene {
     const isMoving = Math.hypot(this.bearVx, this.bearVy) > 10;
 
     if (this.isOnIce) {
-      // Recover warmth and stamina on solid ice
-      this.warmth = Math.min(100, this.warmth + 15 * dt);
-      this.stamina = Math.min(100, this.stamina + 24 * dt);
+      // On ice, warmth only recovers up to your current `maxWarmth` ceiling!
+      this.warmth = Math.min(this.maxWarmth, this.warmth + 18 * dt);
+      this.stamina = Math.min(100, this.stamina + 25 * dt);
     } else {
+      // Staying in freezing water reduces your Maximum Warmth ceiling (fat/caloric reserve)
+      this.maxWarmth = Math.max(15, this.maxWarmth - 2.6 * dt);
+
       // Draining stamina while swimming
       if (isMoving) {
         this.stamina = Math.max(0, this.stamina - 6.8 * dt);
@@ -797,7 +944,10 @@ export class PolarBearScene extends Phaser.Scene {
 
       // Freezing open water drains Body Warmth (faster if Stamina is 0)
       const coldDrain = this.stamina <= 1 ? 13.5 : 5.8;
-      this.warmth = Math.max(0, this.warmth - coldDrain * dt);
+      this.warmth = Math.min(
+        this.maxWarmth,
+        Math.max(0, this.warmth - coldDrain * dt)
+      );
     }
   }
 
@@ -805,8 +955,8 @@ export class PolarBearScene extends Phaser.Scene {
     for (const seal of this.seals) {
       if (seal.state !== 'resting') continue;
 
-      // If the seal's floe collapsed, the seal swims away
-      if (seal.floe.currentScale <= 0.25) {
+      // If the seal's floe broke apart, the seal swims away
+      if (!this.floes.some((f) => f.id === seal.floe.id)) {
         seal.state = 'spooked';
         seal.sprite.setVisible(false);
         seal.alertText.setVisible(false);
@@ -827,19 +977,21 @@ export class PolarBearScene extends Phaser.Scene {
         seal.sprite.y
       );
 
-      // Catch condition: Bear is within 46px (or 62px while lunging!)
+      // Catch condition: Bear is within 46px (or 64px while lunging!)
       const catchRadius = this.lungeTimer > 0 ? 64 : 44;
       if (dist <= catchRadius) {
         seal.state = 'caught';
         seal.sprite.setVisible(false);
         seal.alertText.setVisible(false);
         this.sealsCaught++;
-        this.warmth = Math.min(100, this.warmth + 38);
-        this.stamina = Math.min(100, this.stamina + 48);
+        // Eating a seal is what restores your Maximum Warmth cap!
+        this.maxWarmth = Math.min(100, this.maxWarmth + 30);
+        this.warmth = Math.min(this.maxWarmth, this.warmth + 42);
+        this.stamina = Math.min(100, this.stamina + 50);
         this.spawnFloatingText(
           seal.sprite.x,
           seal.sprite.y,
-          '+WARMTH & STAMINA!',
+          '+30% MAX WARMTH & ENERGY!',
           '#34d399'
         );
         continue;
@@ -1018,11 +1170,11 @@ export class PolarBearScene extends Phaser.Scene {
     const { width, height } = this.scale;
     this.hudGraphics.clear();
 
-    // HUD Panel Box
-    this.hudGraphics.fillStyle(0x06121e, 0.86);
-    this.hudGraphics.fillRoundedRect(16, 12, 310, 142, 10);
+    //HUD Panel Box (slightly wider for Max Warmth info)
+    this.hudGraphics.fillStyle(0x06121e, 0.88);
+    this.hudGraphics.fillRoundedRect(16, 12, 336, 144, 10);
     this.hudGraphics.lineStyle(1, 0x38bdf8, 0.3);
-    this.hudGraphics.strokeRoundedRect(16, 12, 310, 142, 10);
+    this.hudGraphics.strokeRoundedRect(16, 12, 336, 144, 10);
 
     const metersRemaining = Math.max(
       0,
@@ -1040,22 +1192,25 @@ export class PolarBearScene extends Phaser.Scene {
     const anomaly = (2.6 + (1000 - metersRemaining) * 0.0009).toFixed(1);
     this.hudTempText.setText(`Arctic Temp Anomaly: +${anomaly}°C (Rapid Melt)`);
 
-    // 1. Body Warmth Bar
+    // 1. Body Warmth Bar (with Max Warmth ceiling indicator)
     this.drawMeterBar(
       28,
       72,
-      284,
+      308,
       16,
       this.warmth / 100,
-      this.warmth < 30 ? 0xef4444 : 0xea580c
+      this.warmth < 30 ? 0xef4444 : 0xea580c,
+      this.maxWarmth / 100
     );
-    this.hudWarmthLabel.setText(`BODY WARMTH: ${Math.round(this.warmth)}%`);
+    this.hudWarmthLabel.setText(
+      `WARMTH: ${Math.round(this.warmth)}% (MAX ${Math.round(this.maxWarmth)}%)`
+    );
 
     // 2. Swim Stamina Bar
     this.drawMeterBar(
       28,
       100,
-      284,
+      308,
       16,
       this.stamina / 100,
       0x0284c7
@@ -1064,17 +1219,23 @@ export class PolarBearScene extends Phaser.Scene {
 
     // Surface / Ice stability status
     if (this.isOnIce && this.currentFloe) {
-      const stability = Math.round(this.currentFloe.currentScale * 100);
-      this.hudStatusText.setColor(stability < 45 ? '#fbbf24' : '#34d399');
-      this.hudStatusText.setText(
-        this.currentFloe.isSanctuary
-          ? '● ON PERMANENT PACK ICE — SAFE'
-          : `● ON ICE FLOE (${stability}% integrity — melting beneath you)`
-      );
+      if (this.currentFloe.isSanctuary) {
+        this.hudStatusText.setColor('#34d399');
+        this.hudStatusText.setText('● ON PERMANENT PACK ICE — SAFE');
+      } else {
+        const secsLeft = Math.max(
+          0,
+          this.currentFloe.standTimeLimit - this.currentFloe.standTimer
+        );
+        this.hudStatusText.setColor(secsLeft < 1.8 ? '#f87171' : '#fbbf24');
+        this.hudStatusText.setText(
+          `● ICE CRACKING — Breaks apart in ${secsLeft.toFixed(1)}s!`
+        );
+      }
     } else {
       this.hudStatusText.setColor('#f87171');
       this.hudStatusText.setText(
-        '≈ SWIMMING IN FREEZING WATER — Find ice to warm up!'
+        '≈ IN FREEZING WATER — Max Warmth dropping! Eat seals to restore.'
       );
     }
 
@@ -1093,17 +1254,29 @@ export class PolarBearScene extends Phaser.Scene {
     w: number,
     h: number,
     pct: number,
-    fillColor: number
+    fillColor: number,
+    maxPct = 1.0
   ): void {
     this.hudGraphics.fillStyle(0x0f172a, 0.95);
     this.hudGraphics.fillRoundedRect(x, y, w, h, 4);
+
+    // If maxPct < 1.0, shade the depleted ceiling area on the right side of the bar
+    const clampedMax = Phaser.Math.Clamp(maxPct, 0.15, 1);
+    if (clampedMax < 0.995) {
+      const capX = x + 2 + (w - 4) * clampedMax;
+      const lostW = x + w - 2 - capX;
+      this.hudGraphics.fillStyle(0x450a0a, 0.85);
+      this.hudGraphics.fillRect(capX, y + 2, lostW, h - 4);
+      this.hudGraphics.lineStyle(2, 0xf87171, 0.9);
+      this.hudGraphics.lineBetween(capX, y + 1, capX, y + h - 1);
+    }
 
     if (pct > 0) {
       this.hudGraphics.fillStyle(fillColor, 0.95);
       this.hudGraphics.fillRoundedRect(
         x + 2,
         y + 2,
-        Math.max(6, (w - 4) * Phaser.Math.Clamp(pct, 0, 1)),
+        Math.max(6, (w - 4) * Phaser.Math.Clamp(pct, 0, clampedMax)),
         h - 4,
         3
       );
