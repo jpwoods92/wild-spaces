@@ -256,10 +256,6 @@ export class BootScene extends Phaser.Scene {
       const g = this.make.graphics({ x: 0, y: 0 });
       const cy = 40;
 
-      // Subtle bioluminescent / deep water aura
-      g.fillStyle(0x38bdf8, 0.12);
-      g.fillEllipse(76, cy, 118, 54);
-
       // Sweeping, pronounced pectoral flippers angling backward from the chest
       g.fillStyle(0x0f172a, 1);
       g.fillPoints(
@@ -319,25 +315,25 @@ export class BootScene extends Phaser.Scene {
       g.lineBetween(24, cy + 3, 6, cy + 23);
 
       // Long streamlined body tapering smoothly from broad head/shoulders (x=96) to narrow tail stock (x=22)
+      const bodyPts = [
+        new Phaser.Geom.Point(130, cy),
+        new Phaser.Geom.Point(124, cy - 10),
+        new Phaser.Geom.Point(108, cy - 16),
+        new Phaser.Geom.Point(86, cy - 17),
+        new Phaser.Geom.Point(60, cy - 12),
+        new Phaser.Geom.Point(38, cy - 6),
+        new Phaser.Geom.Point(20, cy - 3),
+        new Phaser.Geom.Point(20, cy + 3),
+        new Phaser.Geom.Point(38, cy + 6),
+        new Phaser.Geom.Point(60, cy + 12),
+        new Phaser.Geom.Point(86, cy + 17),
+        new Phaser.Geom.Point(108, cy + 16),
+        new Phaser.Geom.Point(124, cy + 10),
+      ];
       g.fillStyle(0x0f172a, 1);
-      g.fillPoints(
-        [
-          new Phaser.Geom.Point(130, cy),
-          new Phaser.Geom.Point(124, cy - 10),
-          new Phaser.Geom.Point(108, cy - 16),
-          new Phaser.Geom.Point(86, cy - 17),
-          new Phaser.Geom.Point(60, cy - 12),
-          new Phaser.Geom.Point(38, cy - 6),
-          new Phaser.Geom.Point(20, cy - 3),
-          new Phaser.Geom.Point(20, cy + 3),
-          new Phaser.Geom.Point(38, cy + 6),
-          new Phaser.Geom.Point(60, cy + 12),
-          new Phaser.Geom.Point(86, cy + 17),
-          new Phaser.Geom.Point(108, cy + 16),
-          new Phaser.Geom.Point(124, cy + 10),
-        ],
-        true
-      );
+      g.fillPoints(bodyPts, true);
+      g.lineStyle(1.2, 0x475569, 0.7);
+      g.strokePoints(bodyPts, true);
 
       // Inner dorsal contour highlight (tapering toward tail)
       g.fillStyle(0x1e293b, 1);
@@ -391,8 +387,6 @@ export class BootScene extends Phaser.Scene {
     if (!this.textures.exists('whale_calf')) {
       const g = this.make.graphics({ x: 0, y: 0 });
       const cy = 26;
-      g.fillStyle(0x38bdf8, 0.2);
-      g.fillEllipse(46, cy, 70, 34);
 
       // Sweeping pectoral flippers
       g.fillStyle(0x1e293b, 1);
