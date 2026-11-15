@@ -393,7 +393,6 @@ document.getElementById('btn-leaderboard')?.addEventListener('click', () => {
       <span
         class="storage-chip"
         data-tooltip="Times are stored locally only and lost if browser storage is cleared."
-        title="Times are stored locally only and lost if browser storage is cleared."
       >
         Local Storage
       </span>
