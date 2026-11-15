@@ -38,23 +38,22 @@ interface IndustrialShip {
 }
 
 export class PolarBearScene extends Phaser.Scene {
-  private readonly WORLD_WIDTH = 1600;
+  private readonly WORLD_WIDTH = 2400;
   private readonly WORLD_HEIGHT = 4200;
   private readonly START_Y = 3920;
   private readonly SANCTUARY_Y = 380;
 
   private bear!: Phaser.GameObjects.Sprite;
   private cub!: Phaser.GameObjects.Image;
-  private bearX = 800;
+  private bearX = 1200;
   private bearY = 3920;
   private bearVx = 0;
   private bearVy = 0;
   private bearAngle = -Math.PI / 2; // facing North
 
-  // Survival meters (0 - 100)
-  private warmth = 100;
-  private maxWarmth = 100;
+  // Single unified Stamina meter (0 - 100) with decaying Max Stamina in water
   private stamina = 100;
+  private maxStamina = 100;
   private isOnIce = true;
   private currentFloe: IceFloe | null = null;
 
@@ -89,14 +88,14 @@ export class PolarBearScene extends Phaser.Scene {
   };
 
   // HUD Elements (fixed to camera)
+  private viewportOceanBg!: Phaser.GameObjects.Graphics;
   private hudGraphics!: Phaser.GameObjects.Graphics;
   private hudDistanceText!: Phaser.GameObjects.Text;
-  private hudWarmthLabel!: Phaser.GameObjects.Text;
   private hudStaminaLabel!: Phaser.GameObjects.Text;
   private hudStatusText!: Phaser.GameObjects.Text;
   private hudTempText!: Phaser.GameObjects.Text;
   private hudHintText!: Phaser.GameObjects.Text;
-  private hypothermiaVignette!: Phaser.GameObjects.Graphics;
+  private exhaustionVignette!: Phaser.GameObjects.Graphics;
 
   constructor() {
     super({ key: 'PolarBearScene' });
@@ -173,9 +172,8 @@ export class PolarBearScene extends Phaser.Scene {
     this.bearVx = 0;
     this.bearVy = 0;
     this.bearAngle = -Math.PI / 2;
-    this.warmth = 100;
-    this.maxWarmth = 100;
     this.stamina = 100;
+    this.maxStamina = 100;
     this.isOnIce = true;
     this.currentFloe = null;
     this.lungeTimer = 0;
@@ -190,8 +188,15 @@ export class PolarBearScene extends Phaser.Scene {
   }
 
   private drawOceanBackdrop(): void {
+    // Full-viewport fixed ocean fill so wide screens never show a vertical seam on the right
+    this.viewportOceanBg = this.add
+      .graphics()
+      .setScrollFactor(0)
+      .setDepth(-2);
+    this.redrawViewportOcean();
+
     const bg = this.add.graphics().setDepth(0);
-    // Deep Arctic bathyal gradient
+    // Deep Arctic bathyal gradient across world
     bg.fillGradientStyle(0x071e34, 0x071e34, 0x030b14, 0x030b14, 1);
     bg.fillRect(0, 0, this.WORLD_WIDTH, this.WORLD_HEIGHT);
 
@@ -230,6 +235,19 @@ export class PolarBearScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setAlpha(0.75)
       .setDepth(2);
+  }
+
+  private redrawViewportOcean(): void {
+    if (!this.viewportOceanBg) return;
+    this.viewportOceanBg.clear();
+    this.viewportOceanBg.fillGradientStyle(
+      0x071e34,
+      0x071e34,
+      0x030b14,
+      0x030b14,
+      1
+    );
+    this.viewportOceanBg.fillRect(0, 0, this.scale.width, this.scale.height);
   }
 
   private canPlaceFloe(x: number, y: number, radius: number): boolean {
@@ -282,18 +300,19 @@ export class PolarBearScene extends Phaser.Scene {
           (baseRadius - 74) / (112 - 74)
         );
 
+        const centerX = this.WORLD_WIDTH / 2;
         let placedFloe: IceFloe | null = null;
         for (let attempt = 0; attempt < 16; attempt++) {
           const candidateX =
             floesInBand === 1
               ? Phaser.Math.Clamp(
-                  prevX + Phaser.Math.Between(-340, 340),
-                  280,
-                  this.WORLD_WIDTH - 280
+                  prevX + Phaser.Math.Between(-310, 310),
+                  centerX - 420,
+                  centerX + 420
                 )
               : i === 0
-              ? Phaser.Math.Between(300, 640)
-              : Phaser.Math.Between(960, 1300);
+              ? Phaser.Math.Between(centerX - 440, centerX - 150)
+              : Phaser.Math.Between(centerX + 150, centerX + 440);
 
           const candidateY = yCursor + Phaser.Math.Between(-30, 30);
 
@@ -312,7 +331,7 @@ export class PolarBearScene extends Phaser.Scene {
           }
         }
 
-        // Since floes are scarce and eating seals is the ONLY way to recover Max Warmth,
+        // Since floes are scarce and eating seals is the ONLY way to recover Max Stamina,
         // spawn a Ringed Seal on ~62% of stepping-stone floes
         if (placedFloe && Math.random() < 0.62) {
           this.spawnSealOnFloe(placedFloe);
@@ -427,8 +446,8 @@ export class PolarBearScene extends Phaser.Scene {
       standTimer: 0,
       standTimeLimit,
       vx,
-      minX: 220,
-      maxX: this.WORLD_WIDTH - 220,
+      minX: this.WORLD_WIDTH / 2 - 480,
+      maxX: this.WORLD_WIDTH / 2 + 480,
       isSanctuary,
       crackStage: 0,
     };
@@ -563,7 +582,7 @@ export class PolarBearScene extends Phaser.Scene {
   }
 
   private createHUD(): void {
-    this.hypothermiaVignette = this.add
+    this.exhaustionVignette = this.add
       .graphics()
       .setScrollFactor(0)
       .setDepth(95);
@@ -588,18 +607,9 @@ export class PolarBearScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(101);
 
-    this.hudWarmthLabel = this.add
-      .text(0, 0, '', {
-        fontSize: '11px',
-        fontStyle: 'bold',
-        color: '#ffffff',
-      })
-      .setScrollFactor(0)
-      .setDepth(102);
-
     this.hudStaminaLabel = this.add
       .text(0, 0, '', {
-        fontSize: '11px',
+        fontSize: '12px',
         fontStyle: 'bold',
         color: '#ffffff',
       })
@@ -619,7 +629,7 @@ export class PolarBearScene extends Phaser.Scene {
       .text(
         0,
         0,
-        'WASD / Arrows: Walk & Swim   •   SPACE: Lunge to Catch Seals / Dash   •   Rest on ice to recover Warmth',
+        'WASD / Arrows: Walk & Swim   •   SPACE: Lunge to Catch Seals   •   Rest on ice to recover Stamina (Eat seals to restore Max)',
         {
           fontSize: '12px',
           color: '#cbd5e1',
@@ -636,11 +646,11 @@ export class PolarBearScene extends Phaser.Scene {
 
   private layoutHUD(): void {
     const { width, height } = this.scale;
+    this.redrawViewportOcean();
     this.hudDistanceText.setPosition(28, 22);
     this.hudTempText.setPosition(28, 44);
-    this.hudWarmthLabel.setPosition(36, 73);
-    this.hudStaminaLabel.setPosition(36, 101);
-    this.hudStatusText.setPosition(28, 128);
+    this.hudStaminaLabel.setPosition(38, 74);
+    this.hudStatusText.setPosition(28, 104);
     this.hudHintText.setPosition(width / 2, height - 16);
   }
 
@@ -928,25 +938,17 @@ export class PolarBearScene extends Phaser.Scene {
     const isMoving = Math.hypot(this.bearVx, this.bearVy) > 10;
 
     if (this.isOnIce) {
-      // On ice, warmth only recovers up to your current `maxWarmth` ceiling!
-      this.warmth = Math.min(this.maxWarmth, this.warmth + 18 * dt);
-      this.stamina = Math.min(100, this.stamina + 25 * dt);
+      // On ice, Stamina recovers rapidly up to your current `maxStamina` ceiling
+      this.stamina = Math.min(this.maxStamina, this.stamina + 22 * dt);
     } else {
-      // Staying in freezing water reduces your Maximum Warmth ceiling (fat/caloric reserve)
-      this.maxWarmth = Math.max(15, this.maxWarmth - 2.6 * dt);
+      // Staying in open water steadily reduces your Maximum Stamina ceiling
+      this.maxStamina = Math.max(20, this.maxStamina - 2.5 * dt);
 
-      // Draining stamina while swimming
-      if (isMoving) {
-        this.stamina = Math.max(0, this.stamina - 6.8 * dt);
-      } else {
-        this.stamina = Math.max(0, this.stamina - 2.5 * dt);
-      }
-
-      // Freezing open water drains Body Warmth (faster if Stamina is 0)
-      const coldDrain = this.stamina <= 1 ? 13.5 : 5.8;
-      this.warmth = Math.min(
-        this.maxWarmth,
-        Math.max(0, this.warmth - coldDrain * dt)
+      // Draining Stamina while in freezing open water
+      const swimDrain = isMoving ? 6.5 : 3.2;
+      this.stamina = Math.min(
+        this.maxStamina,
+        Math.max(0, this.stamina - swimDrain * dt)
       );
     }
   }
@@ -984,14 +986,13 @@ export class PolarBearScene extends Phaser.Scene {
         seal.sprite.setVisible(false);
         seal.alertText.setVisible(false);
         this.sealsCaught++;
-        // Eating a seal is what restores your Maximum Warmth cap!
-        this.maxWarmth = Math.min(100, this.maxWarmth + 30);
-        this.warmth = Math.min(this.maxWarmth, this.warmth + 42);
-        this.stamina = Math.min(100, this.stamina + 50);
+        // Eating a seal restores your Maximum Stamina ceiling!
+        this.maxStamina = Math.min(100, this.maxStamina + 30);
+        this.stamina = Math.min(this.maxStamina, this.stamina + 45);
         this.spawnFloatingText(
           seal.sprite.x,
           seal.sprite.y,
-          '+30% MAX WARMTH & ENERGY!',
+          '+30% MAX STAMINA!',
           '#34d399'
         );
         continue;
@@ -1061,7 +1062,7 @@ export class PolarBearScene extends Phaser.Scene {
         ship.laneY + 42
       );
 
-      // Push bear back & drain warmth if hit by vessel or heavy wake
+      // Push bear back & drain stamina if hit by vessel or heavy wake
       const dist = Phaser.Math.Distance.Between(
         this.bearX,
         this.bearY,
@@ -1071,7 +1072,7 @@ export class PolarBearScene extends Phaser.Scene {
       if (dist < 78) {
         this.bearX += ship.vx * dt * 1.6;
         this.bearY += (this.bearY < ship.laneY ? -1 : 1) * 90 * dt;
-        this.warmth = Math.max(0, this.warmth - 18 * dt);
+        this.stamina = Math.max(0, this.stamina - 16 * dt);
       }
     }
   }
@@ -1126,8 +1127,8 @@ export class PolarBearScene extends Phaser.Scene {
       return;
     }
 
-    // Loss: Hypothermia (Warmth hit 0)
-    if (this.warmth <= 0) {
+    // Loss: Exhaustion / Drowning (Stamina hit 0)
+    if (this.stamina <= 0) {
       this.gameEnded = true;
       this.triggerImpactOverlay(false);
     }
@@ -1170,11 +1171,11 @@ export class PolarBearScene extends Phaser.Scene {
     const { width, height } = this.scale;
     this.hudGraphics.clear();
 
-    //HUD Panel Box (slightly wider for Max Warmth info)
+    // Compact HUD Panel Box for single Stamina meter
     this.hudGraphics.fillStyle(0x06121e, 0.88);
-    this.hudGraphics.fillRoundedRect(16, 12, 336, 144, 10);
+    this.hudGraphics.fillRoundedRect(16, 12, 344, 120, 10);
     this.hudGraphics.lineStyle(1, 0x38bdf8, 0.3);
-    this.hudGraphics.strokeRoundedRect(16, 12, 336, 144, 10);
+    this.hudGraphics.strokeRoundedRect(16, 12, 344, 120, 10);
 
     const metersRemaining = Math.max(
       0,
@@ -1192,30 +1193,19 @@ export class PolarBearScene extends Phaser.Scene {
     const anomaly = (2.6 + (1000 - metersRemaining) * 0.0009).toFixed(1);
     this.hudTempText.setText(`Arctic Temp Anomaly: +${anomaly}°C (Rapid Melt)`);
 
-    // 1. Body Warmth Bar (with Max Warmth ceiling indicator)
+    // Single Stamina Bar (with Max Stamina ceiling indicator)
     this.drawMeterBar(
       28,
-      72,
-      308,
-      16,
-      this.warmth / 100,
-      this.warmth < 30 ? 0xef4444 : 0xea580c,
-      this.maxWarmth / 100
-    );
-    this.hudWarmthLabel.setText(
-      `WARMTH: ${Math.round(this.warmth)}% (MAX ${Math.round(this.maxWarmth)}%)`
-    );
-
-    // 2. Swim Stamina Bar
-    this.drawMeterBar(
-      28,
-      100,
-      308,
-      16,
+      71,
+      316,
+      20,
       this.stamina / 100,
-      0x0284c7
+      this.stamina < 28 ? 0xef4444 : 0x0ea5e9,
+      this.maxStamina / 100
     );
-    this.hudStaminaLabel.setText(`SWIM STAMINA: ${Math.round(this.stamina)}%`);
+    this.hudStaminaLabel.setText(
+      `STAMINA: ${Math.round(this.stamina)}% (MAX ${Math.round(this.maxStamina)}%)`
+    );
 
     // Surface / Ice stability status
     if (this.isOnIce && this.currentFloe) {
@@ -1235,16 +1225,16 @@ export class PolarBearScene extends Phaser.Scene {
     } else {
       this.hudStatusText.setColor('#f87171');
       this.hudStatusText.setText(
-        '≈ IN FREEZING WATER — Max Warmth dropping! Eat seals to restore.'
+        '≈ SWIMMING — Max Stamina dropping! Eat seals to restore.'
       );
     }
 
-    // Low-warmth frost danger vignette
-    this.hypothermiaVignette.clear();
-    if (this.warmth < 40) {
-      const dangerAlpha = ((40 - this.warmth) / 40) * 0.45;
-      this.hypothermiaVignette.lineStyle(24, 0xef4444, dangerAlpha);
-      this.hypothermiaVignette.strokeRect(0, 0, width, height);
+    // Low-stamina danger vignette
+    this.exhaustionVignette.clear();
+    if (this.stamina < 35) {
+      const dangerAlpha = ((35 - this.stamina) / 35) * 0.45;
+      this.exhaustionVignette.lineStyle(24, 0xef4444, dangerAlpha);
+      this.exhaustionVignette.strokeRect(0, 0, width, height);
     }
   }
 
