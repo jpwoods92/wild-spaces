@@ -4,6 +4,7 @@ import {
   formatHudClock,
   recordLevelCompletion,
 } from '../utils/LeaderboardStore';
+import { ShippingCorridorManager } from '../systems/ShippingCorridorManager';
 
 interface CopepodBloom {
   x: number;
@@ -35,17 +36,6 @@ interface SeismicBuoy {
   pulseTimer: number;
   pulseInterval: number;
   sprite: Phaser.GameObjects.Image;
-}
-
-interface ShippingVessel {
-  x: number;
-  y: number;
-  vx: number;
-  loopMinX: number;
-  loopMaxX: number;
-  noiseTimer: number;
-  sprite: Phaser.GameObjects.Image;
-  wakeGraphics: Phaser.GameObjects.Graphics;
 }
 
 interface AcousticWave {
@@ -129,7 +119,7 @@ export class WhaleScene extends Phaser.Scene {
   private blooms: CopepodBloom[] = [];
   private ghostNets: GhostNetHazard[] = [];
   private seismicBuoys: SeismicBuoy[] = [];
-  private shippingVessels: ShippingVessel[] = [];
+  private shippingManager!: ShippingCorridorManager;
   private acousticWaves: AcousticWave[] = [];
   private calfSprite!: Phaser.GameObjects.Image;
 
@@ -304,7 +294,11 @@ export class WhaleScene extends Phaser.Scene {
     this.blooms = [];
     this.ghostNets = [];
     this.seismicBuoys = [];
-    this.shippingVessels = [];
+    if (!this.shippingManager) {
+      this.shippingManager = new ShippingCorridorManager(this);
+    } else {
+      this.shippingManager.clear();
+    }
     this.acousticWaves = [];
     this.whaleVx = 0;
     this.whaleVy = 0;
@@ -608,101 +602,23 @@ export class WhaleScene extends Phaser.Scene {
   }
 
   private spawnShippingCorridors(): void {
-    const corridorCenters = this.getCorridorCenters();
-    const loopHalfSpan = 1200;
+    const speedBoost = Math.min(48, (this.level - 1) * 12);
+    const shipsPerLane = this.level === 1 ? 1 : 2;
 
-    for (const corridor of corridorCenters) {
-      const centerCorridorX = corridor.x;
-      const centerCorridorY = corridor.y;
-
-      const laneGraphics = this.add.graphics().setDepth(2);
-      laneGraphics.fillStyle(0x7f1d1d, 0.14);
-      laneGraphics.fillRect(0, centerCorridorY - 150, this.worldWidth, 300);
-      laneGraphics.lineStyle(2, 0xf59e0b, 0.42);
-      laneGraphics.lineBetween(
-        0,
-        centerCorridorY - 150,
-        this.worldWidth,
-        centerCorridorY - 150
-      );
-      laneGraphics.lineBetween(
-        0,
-        centerCorridorY + 150,
-        this.worldWidth,
-        centerCorridorY + 150
-      );
-
-      // Center lane divider between the 2 opposing shipping channels
-      laneGraphics.lineStyle(1, 0xfbbf24, 0.2);
-      laneGraphics.lineBetween(
-        0,
-        centerCorridorY,
-        this.worldWidth,
-        centerCorridorY
-      );
-
-      this.add
-        .text(
-          centerCorridorX,
-          centerCorridorY - 130,
-          '⚠ HIGH-DECIBEL SHIPPING CORRIDOR — NOISE MASKS SONAR • SHIP STRIKE IS FATAL ⚠',
-          {
-            fontSize: '12px',
-            fontStyle: 'bold',
-            color: '#fbbf24',
-            letterSpacing: 1.5,
-          }
-        )
-        .setOrigin(0.5)
-        .setAlpha(0.85)
-        .setDepth(3);
-
-      // Level 1 starts gentler (1 ship per lane, slower speed) and scales up on Level 2+
-      const speedBoost = Math.min(48, (this.level - 1) * 12);
-      const shipsPerLane = this.level === 1 ? 1 : 2;
-      const lanes = [
-        {
-          y: centerCorridorY - 60,
-          vx: 145 + speedBoost,
-          shipsInLane: shipsPerLane,
-          phaseOffset: 0,
-        },
-        {
-          y: centerCorridorY + 60,
-          vx: -(160 + speedBoost),
-          shipsInLane: shipsPerLane,
-          phaseOffset: 540,
-        },
-      ];
-
-      const totalLoopWidth = loopHalfSpan * 2;
-      for (const lane of lanes) {
-        const spacing = totalLoopWidth / lane.shipsInLane;
-        for (let s = 0; s < lane.shipsInLane; s++) {
-          const startX =
-            centerCorridorX -
-            loopHalfSpan +
-            ((s * spacing + lane.phaseOffset) % totalLoopWidth);
-
-          const wakeGraphics = this.add.graphics().setDepth(14);
-          const sprite = this.add
-            .image(startX, lane.y, 'industrial_ship')
-            .setDepth(15)
-            .setFlipX(lane.vx < 0);
-
-          this.shippingVessels.push({
-            x: startX,
-            y: lane.y,
-            vx: lane.vx,
-            loopMinX: centerCorridorX - loopHalfSpan,
-            loopMaxX: centerCorridorX + loopHalfSpan,
-            noiseTimer: s * 0.9,
-            sprite,
-            wakeGraphics,
-          });
-        }
-      }
-    }
+    this.shippingManager.spawnCorridors({
+      corridors: this.getCorridorCenters(),
+      worldWidth: this.worldWidth,
+      bannerText:
+        '⚠ HIGH-DECIBEL SHIPPING CORRIDOR — NOISE MASKS SONAR • SHIP STRIKE IS FATAL ⚠',
+      shipsPerLane,
+      eastboundSpeed: 145 + speedBoost,
+      westboundSpeed: 160 + speedBoost,
+      fillColor: 0x7f1d1d,
+      fillAlpha: 0.14,
+      corridorDepth: 2,
+      wakeDepth: 14,
+      shipDepth: 15,
+    });
   }
 
   private createHUD(): void {
@@ -1127,61 +1043,30 @@ export class WhaleScene extends Phaser.Scene {
       }
     }
 
-    // Shipping vessels — wrap relative to the live camera viewport + 380px off-screen buffer
-    // so ships always enter and exit completely off-screen regardless of where the whale swims
-    const camCenterX =
-      this.cameras.main.scrollX + this.cameras.main.width * 0.5;
-    const dynamicHalfSpan = Math.max(
-      1200,
-      this.cameras.main.width * 0.5 + 380
-    );
-    const dynamicSpan = dynamicHalfSpan * 2;
-
-    for (const ship of this.shippingVessels) {
-      ship.x += ship.vx * dt;
-      if (ship.x > camCenterX + dynamicHalfSpan) {
-        ship.x -= dynamicSpan;
-      } else if (ship.x < camCenterX - dynamicHalfSpan) {
-        ship.x += dynamicSpan;
-      }
-      ship.sprite.setPosition(ship.x, ship.y);
-
-      // Periodic propeller acoustic noise rings from moving ships (gentler on Level 1, scales up with level)
-      ship.noiseTimer += dt;
-      if (ship.noiseTimer >= shipNoiseInterval) {
-        ship.noiseTimer = 0;
+    // Shipping vessels — updated via shared ShippingCorridorManager
+    const struckByShip = this.shippingManager.update(dt, {
+      playerX: this.whaleX,
+      playerY: this.whaleY,
+      hitHalfWidth: 76,
+      hitHalfHeight: 32,
+      pulseInterval: shipNoiseInterval,
+      onPeriodicPulse: (shipX, shipY) => {
         this.acousticWaves.push({
-          x: ship.x,
-          y: ship.y,
+          x: shipX,
+          y: shipY,
           radius: 24,
           maxRadius: shipNoiseRadius,
           speed: 255,
           kind: 'noise_pulse',
           color: 0xf59e0b,
         });
-      }
+      },
+    });
 
-      // Draw propeller foam wake
-      ship.wakeGraphics.clear();
-      ship.wakeGraphics.fillStyle(0xbae6fd, 0.2);
-      const wakeDir = ship.vx > 0 ? -1 : 1;
-      ship.wakeGraphics.fillTriangle(
-        ship.x + wakeDir * 58,
-        ship.y,
-        ship.x + wakeDir * 145,
-        ship.y - 24,
-        ship.x + wakeDir * 145,
-        ship.y + 24
-      );
-
-      // Direct hull collision -> Lethal Vessel Strike
-      const dx = Math.abs(this.whaleX - ship.x);
-      const dy = Math.abs(this.whaleY - ship.y);
-      if (dx < 76 && dy < 32) {
-        this.cameras.main.shake(360, 0.022);
-        this.triggerEndState(false, 'ship');
-        return;
-      }
+    if (struckByShip) {
+      this.cameras.main.shake(360, 0.022);
+      this.triggerEndState(false, 'ship');
+      return;
     }
   }
 

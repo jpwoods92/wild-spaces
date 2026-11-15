@@ -4,6 +4,7 @@ import {
   formatHudClock,
   recordLevelCompletion,
 } from '../utils/LeaderboardStore';
+import { ShippingCorridorManager } from '../systems/ShippingCorridorManager';
 
 interface IceFloe {
   id: number;
@@ -33,13 +34,6 @@ interface SealPrey {
   offsetY: number;
   alertLevel: number; // 0 to 100
   state: 'resting' | 'spooked' | 'caught';
-}
-
-interface IndustrialShip {
-  sprite: Phaser.GameObjects.Image;
-  wakeGraphics: Phaser.GameObjects.Graphics;
-  vx: number;
-  laneY: number;
 }
 
 export interface PolarBearSceneData {
@@ -91,9 +85,9 @@ export class PolarBearScene extends Phaser.Scene {
 
   // Entities
   private shippingCorridorCenters: number[] = [];
+  private shippingManager!: ShippingCorridorManager;
   private floes: IceFloe[] = [];
   private seals: SealPrey[] = [];
-  private ships: IndustrialShip[] = [];
 
   // Run telemetry (persists across levels in Infinite Mode)
   private cumulativeMetersBeforeLevel = 0;
@@ -258,9 +252,13 @@ export class PolarBearScene extends Phaser.Scene {
     this.lungeTimer = 0;
     this.lungeCooldown = 0;
     this.shippingCorridorCenters = [];
+    if (!this.shippingManager) {
+      this.shippingManager = new ShippingCorridorManager(this);
+    } else {
+      this.shippingManager.clear();
+    }
     this.floes = [];
     this.seals = [];
-    this.ships = [];
     this.gameEnded = false;
 
     const totalRoutePx = this.startY - this.SANCTUARY_Y;
@@ -666,99 +664,26 @@ export class PolarBearScene extends Phaser.Scene {
   }
 
   private spawnShippingLane(): void {
-    const laneGraphics = this.add.graphics().setDepth(1);
     const centerX = this.WORLD_WIDTH / 2;
-    // Span beyond the full world bounds (-280 .. WORLD_WIDTH + 280) so ships only wrap completely off-screen
-    const minLoopX = -280;
-    const maxLoopX = this.WORLD_WIDTH + 280;
-    const totalLoopWidth = maxLoopX - minLoopX;
+    const speedBoost = Math.min(36, (this.level - 1) * 8);
 
-    for (const centerCorridorY of this.shippingCorridorCenters) {
-      // Draw hazard corridor markers extending well beyond world edges so ultra-wide screens never clip
-      laneGraphics.fillStyle(0x451a03, 0.28);
-      laneGraphics.fillRect(
-        -1000,
-        centerCorridorY - 155,
-        this.WORLD_WIDTH + 2000,
-        310
-      );
-      laneGraphics.lineStyle(2, 0xf59e0b, 0.45);
-      laneGraphics.lineBetween(
-        -1000,
-        centerCorridorY - 155,
-        this.WORLD_WIDTH + 1000,
-        centerCorridorY - 155
-      );
-      laneGraphics.lineBetween(
-        -1000,
-        centerCorridorY + 155,
-        this.WORLD_WIDTH + 1000,
-        centerCorridorY + 155
-      );
-
-      // Center lane divider between the 2 opposing shipping channels
-      laneGraphics.lineStyle(1, 0xfbbf24, 0.2);
-      laneGraphics.lineBetween(
-        -1000,
-        centerCorridorY,
-        this.WORLD_WIDTH + 1000,
-        centerCorridorY
-      );
-
-      this.add
-        .text(
-          centerX,
-          centerCorridorY - 136,
-          '⚠ LETHAL ARCTIC SHIPPING CORRIDOR — VESSEL IMPACT IS FATAL ⚠',
-          {
-            fontSize: '13px',
-            fontStyle: 'bold',
-            color: '#fbbf24',
-            letterSpacing: 2,
-          }
-        )
-        .setOrigin(0.5)
-        .setAlpha(0.85)
-        .setDepth(2);
-
-      const speedBoost = Math.min(36, (this.level - 1) * 8);
-      // 2 lanes of vessel traffic with 3 ships per lane across the full 2,960px off-screen loop (~986px spacing)
-      const lanes = [
-        {
-          y: centerCorridorY - 62,
-          vx: 175 + speedBoost,
-          shipsInLane: 3,
-          phaseOffset: 0,
-        },
-        {
-          y: centerCorridorY + 62,
-          vx: -(195 + speedBoost),
-          shipsInLane: 3,
-          phaseOffset: 490,
-        },
-      ];
-
-      for (const lane of lanes) {
-        const spacing = totalLoopWidth / lane.shipsInLane;
-        for (let s = 0; s < lane.shipsInLane; s++) {
-          const startX =
-            minLoopX + ((s * spacing + lane.phaseOffset) % totalLoopWidth);
-
-          const wakeGraphics = this.add.graphics().setDepth(13);
-          const sprite = this.add
-            .image(startX, lane.y, 'industrial_ship')
-            .setDepth(14)
-            .setFlipX(lane.vx < 0);
-
-          this.ships.push({
-            sprite,
-            wakeGraphics,
-            vx: lane.vx,
-            laneY: lane.y,
-          });
-        }
-      }
-    }
+    this.shippingManager.spawnCorridors({
+      corridors: this.shippingCorridorCenters.map((y) => ({
+        x: centerX,
+        y,
+      })),
+      worldWidth: this.WORLD_WIDTH,
+      bannerText:
+        '⚠ LETHAL ARCTIC SHIPPING CORRIDOR — VESSEL IMPACT IS FATAL ⚠',
+      shipsPerLane: 3,
+      eastboundSpeed: 175 + speedBoost,
+      westboundSpeed: 195 + speedBoost,
+      fillColor: 0x451a03,
+      fillAlpha: 0.28,
+      corridorDepth: 1,
+      wakeDepth: 13,
+      shipDepth: 14,
+    });
   }
 
   private createHUD(): void {
@@ -1237,70 +1162,30 @@ export class PolarBearScene extends Phaser.Scene {
   }
 
   private updateShips(dt: number): void {
-    // Guarantee wrap points are at least 380px outside BOTH the world bounds and the live camera viewport
-    const camLeft = this.cameras.main.scrollX;
-    const camRight = camLeft + this.cameras.main.width;
-    const minLoopX = Math.min(-320, camLeft - 380);
-    const maxLoopX = Math.max(this.WORLD_WIDTH + 320, camRight + 380);
+    const struck = this.shippingManager.update(dt, {
+      playerX: this.bearX,
+      playerY: this.bearY,
+      hitHalfWidth: 74,
+      hitHalfHeight: 28,
+      onWakeOverlap: (shipVx, stepDt) => {
+        this.bearX += shipVx * stepDt * 0.85;
+        this.stamina = Math.max(0, this.stamina - 18 * stepDt);
+      },
+    });
 
-    for (const ship of this.ships) {
-      ship.sprite.x += ship.vx * dt;
-      if (ship.vx > 0 && ship.sprite.x > maxLoopX) {
-        ship.sprite.x = minLoopX;
-      } else if (ship.vx < 0 && ship.sprite.x < minLoopX) {
-        ship.sprite.x = maxLoopX;
-      }
-
-      // Draw V-shaped churning wake behind the vessel
-      ship.wakeGraphics.clear();
-      ship.wakeGraphics.lineStyle(2, 0x94a3b8, 0.42);
-      const dir = ship.vx > 0 ? -1 : 1;
-      const sternX = ship.sprite.x + dir * 65;
-      ship.wakeGraphics.lineBetween(
-        sternX,
-        ship.laneY,
-        sternX + dir * 165,
-        ship.laneY - 38
+    if (struck) {
+      this.gameEnded = true;
+      this.cameras.main.shake(320, 0.014);
+      this.spawnSplashRing(this.bearX, this.bearY, 1.8);
+      this.spawnFloatingText(
+        this.bearX,
+        this.bearY,
+        'STRUCK BY ARCTIC VESSEL!',
+        '#ef4444'
       );
-      ship.wakeGraphics.lineBetween(
-        sternX,
-        ship.laneY,
-        sternX + dir * 165,
-        ship.laneY + 38
-      );
-      ship.wakeGraphics.lineStyle(2, 0x38bdf8, 0.25);
-      ship.wakeGraphics.lineBetween(
-        sternX,
-        ship.laneY,
-        sternX + dir * 135,
-        ship.laneY
-      );
-
-      // 1. Direct Hull Collision -> INSTANT GAME OVER
-      const dx = Math.abs(this.bearX - ship.sprite.x);
-      const dy = Math.abs(this.bearY - ship.laneY);
-      if (dx < 74 && dy < 28) {
-        this.gameEnded = true;
-        this.cameras.main.shake(320, 0.014);
-        this.spawnSplashRing(this.bearX, this.bearY, 1.8);
-        this.spawnFloatingText(
-          this.bearX,
-          this.bearY,
-          'STRUCK BY ARCTIC VESSEL!',
-          '#ef4444'
-        );
-        this.time.delayedCall(500, () => {
-          this.triggerImpactOverlay(false, 'ship');
-        });
-        return;
-      }
-
-      // 2. Stern Propeller Wake Turbulence (drags bear sideways & drains stamina)
-      const wakeDeltaX = (this.bearX - sternX) * dir;
-      if (wakeDeltaX > 0 && wakeDeltaX < 165 && dy < 34) {
-        this.bearX += ship.vx * dt * 0.85;
-        this.stamina = Math.max(0, this.stamina - 18 * dt);
-      }
+      this.time.delayedCall(500, () => {
+        this.triggerImpactOverlay(false, 'ship');
+      });
     }
   }
 
