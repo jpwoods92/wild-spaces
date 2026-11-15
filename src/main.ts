@@ -1,7 +1,10 @@
 import Phaser from 'phaser';
 import { BootScene } from './scenes/BootScene';
 import { HubScene } from './scenes/HubScene';
-import { PolarBearScene } from './scenes/PolarBearScene';
+import {
+  PolarBearScene,
+  PolarBearSceneData,
+} from './scenes/PolarBearScene';
 import { POLAR_BEAR_ASSETS } from './config/AssetManifest';
 
 const config: Phaser.Types.Core.GameConfig = {
@@ -19,42 +22,78 @@ const config: Phaser.Types.Core.GameConfig = {
 
 const game = new Phaser.Game(config);
 
+// Global Infinite Mode option state
+const winState = window as unknown as {
+  wildSpacesInfiniteMode: boolean;
+  showPolarBearImpactModal: (payload: {
+    won: boolean;
+    level: number;
+    levelTargetMeters: number;
+    metersInLevel: number;
+    totalMetersMigrated: number;
+    nextLevelMeters: number;
+    swimMeters: number;
+    sealsCaught: number;
+    floesCollapsed: number;
+    nextLevelData: PolarBearSceneData;
+  }) => void;
+};
+winState.wildSpacesInfiniteMode = false;
+
 // Wire up HTML UI & Conservation Modals
 const impactModal = document.getElementById('impact-modal')!;
 const infoModal = document.getElementById('info-modal')!;
+const btnInfiniteToggle = document.getElementById('btn-infinite-toggle')!;
+const btnNextLevel = document.getElementById('btn-impact-next-level')!;
+
+let pendingNextLevelData: PolarBearSceneData | null = null;
+
+function syncInfiniteButtonUI(): void {
+  if (winState.wildSpacesInfiniteMode) {
+    btnInfiniteToggle.textContent = '∞ Infinite Mode: ON';
+    btnInfiniteToggle.classList.add('btn-infinite-active');
+  } else {
+    btnInfiniteToggle.textContent = '∞ Infinite Mode: OFF';
+    btnInfiniteToggle.classList.remove('btn-infinite-active');
+  }
+}
+
+btnInfiniteToggle.addEventListener('click', () => {
+  winState.wildSpacesInfiniteMode = !winState.wildSpacesInfiniteMode;
+  syncInfiniteButtonUI();
+});
 
 // Expose impact modal hook for PolarBearScene
-(
-  window as unknown as {
-    showPolarBearImpactModal: (payload: {
-      won: boolean;
-      metersNorth: number;
-      swimMeters: number;
-      sealsCaught: number;
-      floesCollapsed: number;
-    }) => void;
-  }
-).showPolarBearImpactModal = (payload) => {
+winState.showPolarBearImpactModal = (payload) => {
   const tag = document.getElementById('impact-tag')!;
   const title = document.getElementById('impact-title')!;
   const summary = document.getElementById('impact-summary')!;
   const statDist = document.getElementById('stat-distance')!;
+  const statDistLabel = document.getElementById('stat-distance-label')!;
   const statSwum = document.getElementById('stat-swum')!;
   const statSeals = document.getElementById('stat-seals')!;
 
+  pendingNextLevelData = payload.won ? payload.nextLevelData : null;
+
   if (payload.won) {
     tag.className = 'modal-tag success';
-    tag.textContent = 'Migration Complete • Reunited';
+    tag.textContent = `Level ${payload.level} Complete • Sanctuary Reached`;
     title.textContent = 'You Reached the Northern Pack Ice';
-    summary.textContent = `Against rapidly fracturing seasonal floes and an active Arctic shipping lane, you navigated 1,000m north and reunited with your cub. Along the way, ${payload.floesCollapsed} ice floes melted away completely.`;
+    summary.textContent = `You navigated ${payload.levelTargetMeters}m north and reunited with your cub (${payload.floesCollapsed} ice patches shattered along the way). Continue north into Level ${
+      payload.level + 1
+    } (${payload.nextLevelMeters}m) where ice patches and seals grow even scarcer!`;
+    btnNextLevel.style.display = 'inline-flex';
+    btnNextLevel.textContent = `Continue North (Level ${payload.level + 1} • ${payload.nextLevelMeters}m →)`;
   } else {
     tag.className = 'modal-tag danger';
-    tag.textContent = 'Stranded in Open Water';
+    tag.textContent = `Stranded on Level ${payload.level}`;
     title.textContent = 'Exhausted by Shrinking Ice';
-    summary.textContent = `You made it ${payload.metersNorth}m of the 1,000m journey north before hypothermia set in. Without stable stepping-stone floes to rest and hunt seals, open-water swims quickly become fatal.`;
+    summary.textContent = `You reached Level ${payload.level} (${payload.metersInLevel}m / ${payload.levelTargetMeters}m in this level, ${payload.totalMetersMigrated}m total) before your stamina gave out in open water.`;
+    btnNextLevel.style.display = 'none';
   }
 
-  statDist.textContent = `${payload.metersNorth}m / 1000m`;
+  statDist.textContent = `${payload.totalMetersMigrated}m`;
+  statDistLabel.textContent = `Total Distance (Lvl ${payload.level})`;
   statSwum.textContent = `${payload.swimMeters}m`;
   statSeals.textContent = `${payload.sealsCaught}`;
 
@@ -65,7 +104,18 @@ const infoModal = document.getElementById('info-modal')!;
 document.getElementById('btn-impact-retry')?.addEventListener('click', () => {
   impactModal.classList.remove('active');
   game.scene.stop('HubScene');
-  game.scene.start('PolarBearScene');
+  game.scene.start('PolarBearScene', { level: 1 });
+});
+
+btnNextLevel.addEventListener('click', () => {
+  impactModal.classList.remove('active');
+  winState.wildSpacesInfiniteMode = true;
+  syncInfiniteButtonUI();
+  game.scene.stop('HubScene');
+  game.scene.start(
+    'PolarBearScene',
+    pendingNextLevelData ?? { level: 2 }
+  );
 });
 
 document.getElementById('btn-impact-hub')?.addEventListener('click', () => {

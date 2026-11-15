@@ -37,11 +37,31 @@ interface IndustrialShip {
   laneY: number;
 }
 
+export interface PolarBearSceneData {
+  level?: number;
+  carryMaxStamina?: number;
+  cumulativeMeters?: number;
+  totalSwimMeters?: number;
+  sealsCaught?: number;
+  floesCollapsed?: number;
+}
+
 export class PolarBearScene extends Phaser.Scene {
   private readonly WORLD_WIDTH = 2400;
-  private readonly WORLD_HEIGHT = 4200;
-  private readonly START_Y = 3920;
   private readonly SANCTUARY_Y = 380;
+  private readonly PIXELS_PER_METER = 3.54;
+  private readonly BASE_LEVEL_METERS = 1000;
+  private readonly METERS_PER_LEVEL_INCREMENT = 300; // Unbounded distance increase per level
+
+  // Dynamic per-level world dimensions & difficulty parameters
+  private level = 1;
+  private levelTargetMeters = 1000;
+  private startY = 3920;
+  private worldHeight = 4200;
+  private iceGapMin = 310;
+  private iceGapMax = 380;
+  private twoFloeChance = 0.38;
+  private sealSpawnChance = 0.62;
 
   private bear!: Phaser.GameObjects.Sprite;
   private cub!: Phaser.GameObjects.Image;
@@ -68,7 +88,8 @@ export class PolarBearScene extends Phaser.Scene {
   private seals: SealPrey[] = [];
   private ships: IndustrialShip[] = [];
 
-  // Run telemetry for Impact Report
+  // Run telemetry (persists across levels in Infinite Mode)
+  private cumulativeMetersBeforeLevel = 0;
   private totalSwimMeters = 0;
   private sealsCaught = 0;
   private floesCollapsed = 0;
@@ -101,17 +122,48 @@ export class PolarBearScene extends Phaser.Scene {
     super({ key: 'PolarBearScene' });
   }
 
+  init(data?: PolarBearSceneData): void {
+    this.level = data?.level && data.level >= 1 ? data.level : 1;
+
+    // 1. Distance needed to reach next level increases by a fixed +300m per level WITHOUT a cap
+    this.levelTargetMeters =
+      this.BASE_LEVEL_METERS +
+      (this.level - 1) * this.METERS_PER_LEVEL_INCREMENT;
+    this.startY =
+      this.SANCTUARY_Y +
+      Math.round(this.levelTargetMeters * this.PIXELS_PER_METER);
+    this.worldHeight = this.startY + 280;
+
+    // 2. Fewer and fewer ice patches down to a minimum density (max gap ceiling at Level 6+)
+    this.iceGapMin = Math.min(440, 310 + (this.level - 1) * 26);
+    this.iceGapMax = Math.min(510, 380 + (this.level - 1) * 26);
+    this.twoFloeChance = Math.max(0.06, 0.38 - (this.level - 1) * 0.065);
+
+    // 3. Fewer and fewer seals down to a minimum spawn chance (20% floor at Level 6+)
+    this.sealSpawnChance = Math.max(0.2, 0.62 - (this.level - 1) * 0.085);
+
+    // Carry over run telemetry if advancing to Level 2+
+    this.cumulativeMetersBeforeLevel = data?.cumulativeMeters ?? 0;
+    this.totalSwimMeters = data?.totalSwimMeters ?? 0;
+    this.sealsCaught = data?.sealsCaught ?? 0;
+    this.floesCollapsed = data?.floesCollapsed ?? 0;
+    this.maxStamina = data?.carryMaxStamina
+      ? Phaser.Math.Clamp(data.carryMaxStamina, 25, 100)
+      : 100;
+    this.stamina = this.maxStamina;
+  }
+
   create(): void {
-    this.resetState();
+    this.resetLevelEntities();
 
     // 1. World Ocean Background & Currents
-    this.cameras.main.setBounds(0, 0, this.WORLD_WIDTH, this.WORLD_HEIGHT);
+    this.cameras.main.setBounds(0, 0, this.WORLD_WIDTH, this.worldHeight);
     this.drawOceanBackdrop();
 
     // 2. Generate Ice Floe Stepping Stones & Northern Sanctuary
     this.generateMigrationRoute();
 
-    // 3. Spawn Industrial Shipping Lane (mid-migration human impact hazard)
+    // 3. Spawn Industrial Shipping Lanes along the migration route
     this.spawnShippingLane();
 
     // 4. Spawn Waiting Polar Bear Cub on the Northern Sanctuary
@@ -160,20 +212,27 @@ export class PolarBearScene extends Phaser.Scene {
     // 8. Build Fixed HUD
     this.createHUD();
 
+    if (this.level > 1) {
+      this.spawnFloatingText(
+        this.bearX,
+        this.bearY - 30,
+        `LEVEL ${this.level} — ${this.levelTargetMeters}m TO NEXT SANCTUARY`,
+        '#38bdf8'
+      );
+    }
+
     // Handle window resize cleanly
     this.scale.on('resize', () => {
       this.layoutHUD();
     });
   }
 
-  private resetState(): void {
+  private resetLevelEntities(): void {
     this.bearX = this.WORLD_WIDTH / 2;
-    this.bearY = this.START_Y;
+    this.bearY = this.startY;
     this.bearVx = 0;
     this.bearVy = 0;
     this.bearAngle = -Math.PI / 2;
-    this.stamina = 100;
-    this.maxStamina = 100;
     this.isOnIce = true;
     this.currentFloe = null;
     this.lungeTimer = 0;
@@ -181,9 +240,6 @@ export class PolarBearScene extends Phaser.Scene {
     this.floes = [];
     this.seals = [];
     this.ships = [];
-    this.totalSwimMeters = 0;
-    this.sealsCaught = 0;
-    this.floesCollapsed = 0;
     this.gameEnded = false;
   }
 
@@ -198,11 +254,11 @@ export class PolarBearScene extends Phaser.Scene {
     const bg = this.add.graphics().setDepth(0);
     // Deep Arctic bathyal gradient across world
     bg.fillGradientStyle(0x071e34, 0x071e34, 0x030b14, 0x030b14, 1);
-    bg.fillRect(0, 0, this.WORLD_WIDTH, this.WORLD_HEIGHT);
+    bg.fillRect(0, 0, this.WORLD_WIDTH, this.worldHeight);
 
     // Subtle horizontal current bands
     bg.lineStyle(2, 0x38bdf8, 0.06);
-    for (let y = 200; y < this.WORLD_HEIGHT; y += 140) {
+    for (let y = 200; y < this.worldHeight; y += 140) {
       bg.beginPath();
       for (let x = 0; x <= this.WORLD_WIDTH; x += 80) {
         const waveY = y + Math.sin(x * 0.008 + y * 0.01) * 18;
@@ -211,30 +267,6 @@ export class PolarBearScene extends Phaser.Scene {
       }
       bg.strokePath();
     }
-
-    // Shipping Lane Hazard Corridor Marker (around Y = 1950..2250)
-    const laneGraphics = this.add.graphics().setDepth(1);
-    laneGraphics.fillStyle(0x451a03, 0.22);
-    laneGraphics.fillRect(0, 1940, this.WORLD_WIDTH, 320);
-    laneGraphics.lineStyle(2, 0xf59e0b, 0.35);
-    laneGraphics.lineBetween(0, 1940, this.WORLD_WIDTH, 1940);
-    laneGraphics.lineBetween(0, 2260, this.WORLD_WIDTH, 2260);
-
-    this.add
-      .text(
-        this.WORLD_WIDTH / 2,
-        1962,
-        '⚠ COMMERCIAL ARCTIC SHIPPING CORRIDOR — HIGH WAKE & ICE BREAKUP ⚠',
-        {
-          fontSize: '13px',
-          fontStyle: 'bold',
-          color: '#fbbf24',
-          letterSpacing: 2,
-        }
-      )
-      .setOrigin(0.5)
-      .setAlpha(0.75)
-      .setDepth(2);
   }
 
   private redrawViewportOcean(): void {
@@ -274,29 +306,31 @@ export class PolarBearScene extends Phaser.Scene {
     this.createIceFloe(
       nextId++,
       this.WORLD_WIDTH / 2,
-      this.START_Y,
+      this.startY,
       125,
       7.5,
       0
     );
 
-    // 2. Sparse stepping-stone floes from South (Y=3580) to North (Y=740)
-    // Much larger open-water gaps (~310px to 380px vertically) and mostly 1 floe per row
-    let yCursor = 3580;
+    // 2. Stepping-stone floes from South (`this.startY - 340`) to North (`Y = 740`)
+    // Ice density and seal spawn rate scale down with `this.level` to their minimum floors,
+    // while `this.startY` grows without bound by +300m per level.
+    let yCursor = this.startY - 340;
     let prevX = this.WORLD_WIDTH / 2;
+    let floesSinceLastSeal = 0;
+
+    // Stand time limit tightens slightly per level down to a minimum floor (2.7s..4.0s)
+    const minStandTime = Math.max(2.7, 3.6 - (this.level - 1) * 0.16);
+    const maxStandTime = Math.max(4.0, 5.2 - (this.level - 1) * 0.2);
 
     while (yCursor > 740) {
-      const inShippingLane = yCursor > 1960 && yCursor < 2240;
-      // Mostly 1 floe per vertical band (occasionally 2 well-separated floes outside shipping lane)
-      const floesInBand =
-        inShippingLane || Math.random() < 0.62 ? 1 : 2;
+      const floesInBand = Math.random() < this.twoFloeChance ? 2 : 1;
 
       for (let i = 0; i < floesInBand; i++) {
         const baseRadius = Phaser.Math.Between(74, 112);
-        // Smaller floes break apart in ~3.6s of standing; larger ones in ~5.2s
         const standTimeLimit = Phaser.Math.Linear(
-          3.6,
-          5.2,
+          minStandTime,
+          maxStandTime,
           (baseRadius - 74) / (112 - 74)
         );
 
@@ -317,7 +351,7 @@ export class PolarBearScene extends Phaser.Scene {
           const candidateY = yCursor + Phaser.Math.Between(-30, 30);
 
           if (this.canPlaceFloe(candidateX, candidateY, baseRadius)) {
-            const driftVx = Phaser.Math.FloatBetween(-22, 22);
+            const driftVx = Phaser.Math.FloatBetween(-24, 24);
             placedFloe = this.createIceFloe(
               nextId++,
               candidateX,
@@ -331,14 +365,20 @@ export class PolarBearScene extends Phaser.Scene {
           }
         }
 
-        // Since floes are scarce and eating seals is the ONLY way to recover Max Stamina,
-        // spawn a Ringed Seal on ~62% of stepping-stone floes
-        if (placedFloe && Math.random() < 0.62) {
-          this.spawnSealOnFloe(placedFloe);
+        // Seal spawning scales down to `sealSpawnChance` floor (20%), with a 5-floe pity guarantee
+        if (placedFloe) {
+          floesSinceLastSeal++;
+          if (
+            Math.random() < this.sealSpawnChance ||
+            floesSinceLastSeal >= 5
+          ) {
+            this.spawnSealOnFloe(placedFloe);
+            floesSinceLastSeal = 0;
+          }
         }
       }
 
-      yCursor -= Phaser.Math.Between(310, 380);
+      yCursor -= Phaser.Math.Between(this.iceGapMin, this.iceGapMax);
     }
 
     // 3. Permanent Northern Pack Ice Sanctuary (Top of map)
@@ -356,7 +396,7 @@ export class PolarBearScene extends Phaser.Scene {
       .text(
         this.WORLD_WIDTH / 2,
         this.SANCTUARY_Y - 140,
-        '★ PERMANENT NORTHERN PACK ICE SANCTUARY ★',
+        `★ LEVEL ${this.level} NORTHERN PACK ICE SANCTUARY ★`,
         {
           fontSize: '15px',
           fontStyle: 'bold',
@@ -560,24 +600,76 @@ export class PolarBearScene extends Phaser.Scene {
   }
 
   private spawnShippingLane(): void {
-    const lanes = [
-      { y: 2010, vx: 115, startX: 300 },
-      { y: 2180, vx: -125, startX: 1250 },
-    ];
+    const laneGraphics = this.add.graphics().setDepth(1);
+    const totalRoutePx = this.startY - this.SANCTUARY_Y;
+    const numCorridors = Math.max(1, Math.floor(totalRoutePx / 2100));
 
-    for (const lane of lanes) {
-      const wakeGraphics = this.add.graphics().setDepth(13);
-      const sprite = this.add
-        .image(lane.startX, lane.y, 'industrial_ship')
-        .setDepth(14)
-        .setFlipX(lane.vx < 0);
+    for (let c = 1; c <= numCorridors; c++) {
+      const centerCorridorY = Math.round(
+        this.SANCTUARY_Y + (totalRoutePx * c) / (numCorridors + 1)
+      );
 
-      this.ships.push({
-        sprite,
-        wakeGraphics,
-        vx: lane.vx,
-        laneY: lane.y,
-      });
+      // Draw hazard corridor markers on ocean backdrop
+      laneGraphics.fillStyle(0x451a03, 0.22);
+      laneGraphics.fillRect(0, centerCorridorY - 150, this.WORLD_WIDTH, 300);
+      laneGraphics.lineStyle(2, 0xf59e0b, 0.35);
+      laneGraphics.lineBetween(
+        0,
+        centerCorridorY - 150,
+        this.WORLD_WIDTH,
+        centerCorridorY - 150
+      );
+      laneGraphics.lineBetween(
+        0,
+        centerCorridorY + 150,
+        this.WORLD_WIDTH,
+        centerCorridorY + 150
+      );
+
+      this.add
+        .text(
+          this.WORLD_WIDTH / 2,
+          centerCorridorY - 128,
+          '⚠ COMMERCIAL ARCTIC SHIPPING CORRIDOR — HIGH WAKE & ICE BREAKUP ⚠',
+          {
+            fontSize: '13px',
+            fontStyle: 'bold',
+            color: '#fbbf24',
+            letterSpacing: 2,
+          }
+        )
+        .setOrigin(0.5)
+        .setAlpha(0.75)
+        .setDepth(2);
+
+      const speedBoost = Math.min(45, (this.level - 1) * 8);
+      const lanes = [
+        {
+          y: centerCorridorY - 65,
+          vx: 115 + speedBoost,
+          startX: this.WORLD_WIDTH * 0.32,
+        },
+        {
+          y: centerCorridorY + 65,
+          vx: -(125 + speedBoost),
+          startX: this.WORLD_WIDTH * 0.68,
+        },
+      ];
+
+      for (const lane of lanes) {
+        const wakeGraphics = this.add.graphics().setDepth(13);
+        const sprite = this.add
+          .image(lane.startX, lane.y, 'industrial_ship')
+          .setDepth(14)
+          .setFlipX(lane.vx < 0);
+
+        this.ships.push({
+          sprite,
+          wakeGraphics,
+          vx: lane.vx,
+          laneY: lane.y,
+        });
+      }
     }
   }
 
@@ -912,7 +1004,7 @@ export class PolarBearScene extends Phaser.Scene {
     this.bearY = Phaser.Math.Clamp(
       this.bearY + this.bearVy * dt,
       180,
-      this.WORLD_HEIGHT - 60
+      this.worldHeight - 60
     );
 
     const frameDist = Math.hypot(this.bearX - prevX, this.bearY - prevY);
@@ -1120,11 +1212,46 @@ export class PolarBearScene extends Phaser.Scene {
     });
   }
 
+  public getNextLevelData(): PolarBearSceneData {
+    return {
+      level: this.level + 1,
+      carryMaxStamina: Math.min(100, this.maxStamina + 20),
+      cumulativeMeters:
+        this.cumulativeMetersBeforeLevel + this.levelTargetMeters,
+      totalSwimMeters: Math.round(this.totalSwimMeters),
+      sealsCaught: this.sealsCaught,
+      floesCollapsed: this.floesCollapsed,
+    };
+  }
+
   private checkWinLoss(): void {
     // Win: Reached the Northern Sanctuary near the Cub
     if (this.bearY <= this.SANCTUARY_Y + 75 && this.isOnIce) {
       this.gameEnded = true;
-      this.triggerImpactOverlay(true);
+
+      const isInfiniteMode = Boolean(
+        (window as unknown as { wildSpacesInfiniteMode?: boolean })
+          .wildSpacesInfiniteMode
+      );
+
+      if (isInfiniteMode) {
+        const nextLevel = this.level + 1;
+        const nextMeters =
+          this.BASE_LEVEL_METERS +
+          (nextLevel - 1) * this.METERS_PER_LEVEL_INCREMENT;
+        this.spawnFloatingText(
+          this.bearX,
+          this.bearY - 24,
+          `★ LEVEL ${this.level} COMPLETE! +20% MAX STAMINA → LEVEL ${nextLevel} (${nextMeters}m)`,
+          '#34d399'
+        );
+        this.renderHUD();
+        this.time.delayedCall(1500, () => {
+          this.scene.restart(this.getNextLevelData());
+        });
+      } else {
+        this.triggerImpactOverlay(true);
+      }
       return;
     }
 
@@ -1136,34 +1263,52 @@ export class PolarBearScene extends Phaser.Scene {
   }
 
   private triggerImpactOverlay(won: boolean): void {
-    const metersNorth = Math.min(
-      1000,
+    const metersInCurrentLevel = Math.min(
+      this.levelTargetMeters,
       Math.max(
         0,
         Math.round(
-          ((this.START_Y - this.bearY) / (this.START_Y - this.SANCTUARY_Y)) *
-            1000
+          ((this.startY - this.bearY) / (this.startY - this.SANCTUARY_Y)) *
+            this.levelTargetMeters
         )
       )
     );
 
+    const totalMetersMigrated =
+      this.cumulativeMetersBeforeLevel +
+      (won ? this.levelTargetMeters : metersInCurrentLevel);
+
+    const nextLevelMeters =
+      this.BASE_LEVEL_METERS +
+      this.level * this.METERS_PER_LEVEL_INCREMENT;
+
     const openOverlay = (window as unknown as {
       showPolarBearImpactModal?: (payload: {
         won: boolean;
-        metersNorth: number;
+        level: number;
+        levelTargetMeters: number;
+        metersInLevel: number;
+        totalMetersMigrated: number;
+        nextLevelMeters: number;
         swimMeters: number;
         sealsCaught: number;
         floesCollapsed: number;
+        nextLevelData: PolarBearSceneData;
       }) => void;
     }).showPolarBearImpactModal;
 
     if (openOverlay) {
       openOverlay({
         won,
-        metersNorth: won ? 1000 : metersNorth,
+        level: this.level,
+        levelTargetMeters: this.levelTargetMeters,
+        metersInLevel: won ? this.levelTargetMeters : metersInCurrentLevel,
+        totalMetersMigrated,
+        nextLevelMeters,
         swimMeters: Math.round(this.totalSwimMeters),
         sealsCaught: this.sealsCaught,
         floesCollapsed: this.floesCollapsed,
+        nextLevelData: this.getNextLevelData(),
       });
     }
   }
@@ -1175,18 +1320,26 @@ export class PolarBearScene extends Phaser.Scene {
     const metersRemaining = Math.max(
       0,
       Math.round(
-        ((this.bearY - this.SANCTUARY_Y) / (this.START_Y - this.SANCTUARY_Y)) *
-          1000
+        ((this.bearY - this.SANCTUARY_Y) / (this.startY - this.SANCTUARY_Y)) *
+          this.levelTargetMeters
       )
     );
 
     this.hudDistanceText.setText(
-      `▲ ${metersRemaining}m North to Pack Ice & Cub`
+      `LVL ${this.level}  •  ▲ ${metersRemaining}m / ${this.levelTargetMeters}m North`
     );
 
-    // Arctic Temperature Anomaly rises slightly as time passes
-    const anomaly = (2.6 + (1000 - metersRemaining) * 0.0009).toFixed(1);
-    this.hudTempText.setText(`Arctic Temp Anomaly: +${anomaly}°C (Rapid Melt)`);
+    // Arctic Temperature Anomaly rises with each level and progress
+    const anomaly = (
+      2.6 +
+      (this.level - 1) * 0.4 +
+      ((this.levelTargetMeters - metersRemaining) / this.levelTargetMeters) *
+        0.5
+    ).toFixed(1);
+    const sealPct = Math.round(this.sealSpawnChance * 100);
+    this.hudTempText.setText(
+      `Temp: +${anomaly}°C  •  Seal Rate: ${sealPct}%  •  Ice Gap: ${this.iceGapMin}-${this.iceGapMax}px`
+    );
 
     this.hudStaminaLabel.setText(
       `STAMINA: ${Math.round(this.stamina)}% (MAX ${Math.round(this.maxStamina)}%)`
@@ -1218,6 +1371,7 @@ export class PolarBearScene extends Phaser.Scene {
     const contentWidth = Math.max(
       340,
       this.hudDistanceText.width,
+      this.hudTempText.width,
       this.hudStatusText.width
     );
     const panelWidth = contentWidth + 28;
