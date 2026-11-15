@@ -84,6 +84,7 @@ export class PolarBearScene extends Phaser.Scene {
   private lungeDirY = 0;
 
   // Entities
+  private shippingCorridorCenters: number[] = [];
   private floes: IceFloe[] = [];
   private seals: SealPrey[] = [];
   private ships: IndustrialShip[] = [];
@@ -237,10 +238,20 @@ export class PolarBearScene extends Phaser.Scene {
     this.currentFloe = null;
     this.lungeTimer = 0;
     this.lungeCooldown = 0;
+    this.shippingCorridorCenters = [];
     this.floes = [];
     this.seals = [];
     this.ships = [];
     this.gameEnded = false;
+
+    const totalRoutePx = this.startY - this.SANCTUARY_Y;
+    const numCorridors = Math.max(1, Math.floor(totalRoutePx / 1950));
+    for (let c = 1; c <= numCorridors; c++) {
+      const centerCorridorY = Math.round(
+        this.SANCTUARY_Y + (totalRoutePx * c) / (numCorridors + 1)
+      );
+      this.shippingCorridorCenters.push(centerCorridorY);
+    }
   }
 
   private drawOceanBackdrop(): void {
@@ -324,6 +335,42 @@ export class PolarBearScene extends Phaser.Scene {
     const maxStandTime = Math.max(4.0, 5.2 - (this.level - 1) * 0.2);
 
     while (yCursor > 740) {
+      // Check if yCursor falls inside any ice-free shipping corridor (`±175px`)
+      const blockingCorridorY = this.shippingCorridorCenters.find(
+        (cy) => Math.abs(yCursor - cy) < 175
+      );
+
+      if (blockingCorridorY !== undefined) {
+        // Ensure there is at least one staging floe just south of the shipping corridor
+        const hasSouthStaging = this.floes.some(
+          (f) =>
+            f.baseY >= blockingCorridorY + 170 &&
+            f.baseY <= blockingCorridorY + 290
+        );
+        if (!hasSouthStaging) {
+          const stageX = Phaser.Math.Clamp(
+            prevX + Phaser.Math.Between(-160, 160),
+            this.WORLD_WIDTH / 2 - 360,
+            this.WORLD_WIDTH / 2 + 360
+          );
+          const stageFloe = this.createIceFloe(
+            nextId++,
+            stageX,
+            blockingCorridorY + 205,
+            96,
+            maxStandTime + 0.6,
+            Phaser.Math.FloatBetween(-14, 14)
+          );
+          prevX = stageX;
+          if (Math.random() < this.sealSpawnChance) {
+            this.spawnSealOnFloe(stageFloe);
+          }
+        }
+        // Jump across the ice-free shipping lane to the north edge (`blockingCorridorY - 205`)
+        yCursor = blockingCorridorY - 205;
+        if (yCursor <= 740) break;
+      }
+
       const floesInBand = Math.random() < this.twoFloeChance ? 2 : 1;
 
       for (let i = 0; i < floesInBand; i++) {
@@ -601,36 +648,47 @@ export class PolarBearScene extends Phaser.Scene {
 
   private spawnShippingLane(): void {
     const laneGraphics = this.add.graphics().setDepth(1);
-    const totalRoutePx = this.startY - this.SANCTUARY_Y;
-    const numCorridors = Math.max(1, Math.floor(totalRoutePx / 2100));
+    const centerX = this.WORLD_WIDTH / 2;
+    const loopHalfSpan = 880; // 1,760px loop width so 4 ships per lane are always spaced ~440px apart
 
-    for (let c = 1; c <= numCorridors; c++) {
-      const centerCorridorY = Math.round(
-        this.SANCTUARY_Y + (totalRoutePx * c) / (numCorridors + 1)
-      );
-
-      // Draw hazard corridor markers on ocean backdrop
-      laneGraphics.fillStyle(0x451a03, 0.22);
-      laneGraphics.fillRect(0, centerCorridorY - 150, this.WORLD_WIDTH, 300);
-      laneGraphics.lineStyle(2, 0xf59e0b, 0.35);
+    for (const centerCorridorY of this.shippingCorridorCenters) {
+      // Draw 3-lane hazard corridor markers on ocean backdrop
+      laneGraphics.fillStyle(0x451a03, 0.28);
+      laneGraphics.fillRect(0, centerCorridorY - 155, this.WORLD_WIDTH, 310);
+      laneGraphics.lineStyle(2, 0xf59e0b, 0.45);
       laneGraphics.lineBetween(
         0,
-        centerCorridorY - 150,
+        centerCorridorY - 155,
         this.WORLD_WIDTH,
-        centerCorridorY - 150
+        centerCorridorY - 155
       );
       laneGraphics.lineBetween(
         0,
-        centerCorridorY + 150,
+        centerCorridorY + 155,
         this.WORLD_WIDTH,
-        centerCorridorY + 150
+        centerCorridorY + 155
+      );
+
+      // Dashed lane dividers
+      laneGraphics.lineStyle(1, 0xfbbf24, 0.18);
+      laneGraphics.lineBetween(
+        0,
+        centerCorridorY - 48,
+        this.WORLD_WIDTH,
+        centerCorridorY - 48
+      );
+      laneGraphics.lineBetween(
+        0,
+        centerCorridorY + 48,
+        this.WORLD_WIDTH,
+        centerCorridorY + 48
       );
 
       this.add
         .text(
-          this.WORLD_WIDTH / 2,
-          centerCorridorY - 128,
-          '⚠ COMMERCIAL ARCTIC SHIPPING CORRIDOR — HIGH WAKE & ICE BREAKUP ⚠',
+          centerX,
+          centerCorridorY - 136,
+          '⚠ LETHAL ARCTIC SHIPPING CORRIDOR — VESSEL IMPACT IS FATAL ⚠',
           {
             fontSize: '13px',
             fontStyle: 'bold',
@@ -639,36 +697,54 @@ export class PolarBearScene extends Phaser.Scene {
           }
         )
         .setOrigin(0.5)
-        .setAlpha(0.75)
+        .setAlpha(0.85)
         .setDepth(2);
 
-      const speedBoost = Math.min(45, (this.level - 1) * 8);
+      const speedBoost = Math.min(75, (this.level - 1) * 14);
+      // 3 distinct lanes of fast vessel traffic with alternating directions & speeds
       const lanes = [
         {
-          y: centerCorridorY - 65,
-          vx: 115 + speedBoost,
-          startX: this.WORLD_WIDTH * 0.32,
+          y: centerCorridorY - 92,
+          vx: 255 + speedBoost,
+          shipsInLane: 4,
+          phaseOffset: 0,
         },
         {
-          y: centerCorridorY + 65,
-          vx: -(125 + speedBoost),
-          startX: this.WORLD_WIDTH * 0.68,
+          y: centerCorridorY,
+          vx: -(295 + speedBoost),
+          shipsInLane: 4,
+          phaseOffset: 140,
+        },
+        {
+          y: centerCorridorY + 92,
+          vx: 235 + speedBoost,
+          shipsInLane: 4,
+          phaseOffset: 260,
         },
       ];
 
+      const totalLoopWidth = loopHalfSpan * 2;
       for (const lane of lanes) {
-        const wakeGraphics = this.add.graphics().setDepth(13);
-        const sprite = this.add
-          .image(lane.startX, lane.y, 'industrial_ship')
-          .setDepth(14)
-          .setFlipX(lane.vx < 0);
+        const spacing = totalLoopWidth / lane.shipsInLane;
+        for (let s = 0; s < lane.shipsInLane; s++) {
+          const startX =
+            centerX -
+            loopHalfSpan +
+            ((s * spacing + lane.phaseOffset) % totalLoopWidth);
 
-        this.ships.push({
-          sprite,
-          wakeGraphics,
-          vx: lane.vx,
-          laneY: lane.y,
-        });
+          const wakeGraphics = this.add.graphics().setDepth(13);
+          const sprite = this.add
+            .image(startX, lane.y, 'industrial_ship')
+            .setDepth(14)
+            .setFlipX(lane.vx < 0);
+
+          this.ships.push({
+            sprite,
+            wakeGraphics,
+            vx: lane.vx,
+            laneY: lane.y,
+          });
+        }
       }
     }
   }
@@ -1129,43 +1205,67 @@ export class PolarBearScene extends Phaser.Scene {
   }
 
   private updateShips(dt: number): void {
+    const centerX = this.WORLD_WIDTH / 2;
+    const minLoopX = centerX - 880;
+    const maxLoopX = centerX + 880;
+
     for (const ship of this.ships) {
       ship.sprite.x += ship.vx * dt;
-      if (ship.vx > 0 && ship.sprite.x > this.WORLD_WIDTH + 160) {
-        ship.sprite.x = -160;
-      } else if (ship.vx < 0 && ship.sprite.x < -160) {
-        ship.sprite.x = this.WORLD_WIDTH + 160;
+      if (ship.vx > 0 && ship.sprite.x > maxLoopX) {
+        ship.sprite.x -= maxLoopX - minLoopX;
+      } else if (ship.vx < 0 && ship.sprite.x < minLoopX) {
+        ship.sprite.x += maxLoopX - minLoopX;
       }
 
-      // Draw V-shaped wake behind the vessel
+      // Draw V-shaped churning wake behind the vessel
       ship.wakeGraphics.clear();
-      ship.wakeGraphics.lineStyle(2, 0x94a3b8, 0.35);
+      ship.wakeGraphics.lineStyle(2, 0x94a3b8, 0.42);
       const dir = ship.vx > 0 ? -1 : 1;
       const sternX = ship.sprite.x + dir * 65;
       ship.wakeGraphics.lineBetween(
         sternX,
         ship.laneY,
-        sternX + dir * 180,
-        ship.laneY - 42
+        sternX + dir * 165,
+        ship.laneY - 38
       );
       ship.wakeGraphics.lineBetween(
         sternX,
         ship.laneY,
-        sternX + dir * 180,
-        ship.laneY + 42
+        sternX + dir * 165,
+        ship.laneY + 38
       );
-
-      // Push bear back & drain stamina if hit by vessel or heavy wake
-      const dist = Phaser.Math.Distance.Between(
-        this.bearX,
-        this.bearY,
-        ship.sprite.x,
+      ship.wakeGraphics.lineStyle(2, 0x38bdf8, 0.25);
+      ship.wakeGraphics.lineBetween(
+        sternX,
+        ship.laneY,
+        sternX + dir * 135,
         ship.laneY
       );
-      if (dist < 78) {
-        this.bearX += ship.vx * dt * 1.6;
-        this.bearY += (this.bearY < ship.laneY ? -1 : 1) * 90 * dt;
-        this.stamina = Math.max(0, this.stamina - 16 * dt);
+
+      // 1. Direct Hull Collision -> INSTANT GAME OVER
+      const dx = Math.abs(this.bearX - ship.sprite.x);
+      const dy = Math.abs(this.bearY - ship.laneY);
+      if (dx < 74 && dy < 28) {
+        this.gameEnded = true;
+        this.cameras.main.shake(320, 0.014);
+        this.spawnSplashRing(this.bearX, this.bearY, 1.8);
+        this.spawnFloatingText(
+          this.bearX,
+          this.bearY,
+          'STRUCK BY ARCTIC VESSEL!',
+          '#ef4444'
+        );
+        this.time.delayedCall(500, () => {
+          this.triggerImpactOverlay(false, 'ship');
+        });
+        return;
+      }
+
+      // 2. Stern Propeller Wake Turbulence (drags bear sideways & drains stamina)
+      const wakeDeltaX = (this.bearX - sternX) * dir;
+      if (wakeDeltaX > 0 && wakeDeltaX < 165 && dy < 34) {
+        this.bearX += ship.vx * dt * 0.85;
+        this.stamina = Math.max(0, this.stamina - 18 * dt);
       }
     }
   }
@@ -1262,7 +1362,10 @@ export class PolarBearScene extends Phaser.Scene {
     }
   }
 
-  private triggerImpactOverlay(won: boolean): void {
+  private triggerImpactOverlay(
+    won: boolean,
+    deathReason: 'exhaustion' | 'ship' = 'exhaustion'
+  ): void {
     const metersInCurrentLevel = Math.min(
       this.levelTargetMeters,
       Math.max(
@@ -1285,6 +1388,7 @@ export class PolarBearScene extends Phaser.Scene {
     const openOverlay = (window as unknown as {
       showPolarBearImpactModal?: (payload: {
         won: boolean;
+        deathReason?: 'exhaustion' | 'ship';
         level: number;
         levelTargetMeters: number;
         metersInLevel: number;
@@ -1300,6 +1404,7 @@ export class PolarBearScene extends Phaser.Scene {
     if (openOverlay) {
       openOverlay({
         won,
+        deathReason,
         level: this.level,
         levelTargetMeters: this.levelTargetMeters,
         metersInLevel: won ? this.levelTargetMeters : metersInCurrentLevel,

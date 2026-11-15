@@ -27,6 +27,7 @@ const winState = window as unknown as {
   wildSpacesInfiniteMode: boolean;
   showPolarBearImpactModal: (payload: {
     won: boolean;
+    deathReason?: 'exhaustion' | 'ship';
     level: number;
     levelTargetMeters: number;
     metersInLevel: number;
@@ -84,6 +85,12 @@ winState.showPolarBearImpactModal = (payload) => {
     } (${payload.nextLevelMeters}m) where ice patches and seals grow even scarcer!`;
     btnNextLevel.style.display = 'inline-flex';
     btnNextLevel.textContent = `Continue North (Level ${payload.level + 1} • ${payload.nextLevelMeters}m →)`;
+  } else if (payload.deathReason === 'ship') {
+    tag.className = 'modal-tag danger';
+    tag.textContent = `Vessel Strike • Level ${payload.level}`;
+    title.textContent = 'Struck by an Industrial Arctic Vessel';
+    summary.textContent = `As melting sea ice opens new commercial shipping corridors across the Arctic, vessel traffic has surged—creating lethal open-water crossings for migrating wildlife (${payload.totalMetersMigrated}m total progress).`;
+    btnNextLevel.style.display = 'none';
   } else {
     tag.className = 'modal-tag danger';
     tag.textContent = `Stranded on Level ${payload.level}`;
