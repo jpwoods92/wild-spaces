@@ -674,29 +674,34 @@ export class PolarBearScene extends Phaser.Scene {
     const totalLoopWidth = maxLoopX - minLoopX;
 
     for (const centerCorridorY of this.shippingCorridorCenters) {
-      // Draw 3-lane hazard corridor markers on ocean backdrop
+      // Draw hazard corridor markers extending well beyond world edges so ultra-wide screens never clip
       laneGraphics.fillStyle(0x451a03, 0.28);
-      laneGraphics.fillRect(0, centerCorridorY - 155, this.WORLD_WIDTH, 310);
+      laneGraphics.fillRect(
+        -1000,
+        centerCorridorY - 155,
+        this.WORLD_WIDTH + 2000,
+        310
+      );
       laneGraphics.lineStyle(2, 0xf59e0b, 0.45);
       laneGraphics.lineBetween(
-        0,
+        -1000,
         centerCorridorY - 155,
-        this.WORLD_WIDTH,
+        this.WORLD_WIDTH + 1000,
         centerCorridorY - 155
       );
       laneGraphics.lineBetween(
-        0,
+        -1000,
         centerCorridorY + 155,
-        this.WORLD_WIDTH,
+        this.WORLD_WIDTH + 1000,
         centerCorridorY + 155
       );
 
       // Center lane divider between the 2 opposing shipping channels
       laneGraphics.lineStyle(1, 0xfbbf24, 0.2);
       laneGraphics.lineBetween(
-        0,
+        -1000,
         centerCorridorY,
-        this.WORLD_WIDTH,
+        this.WORLD_WIDTH + 1000,
         centerCorridorY
       );
 
@@ -1232,16 +1237,18 @@ export class PolarBearScene extends Phaser.Scene {
   }
 
   private updateShips(dt: number): void {
-    // Wrap well outside the world & camera bounds (-280 .. WORLD_WIDTH + 280) so ships never pop in/out on screen
-    const minLoopX = -280;
-    const maxLoopX = this.WORLD_WIDTH + 280;
+    // Guarantee wrap points are at least 380px outside BOTH the world bounds and the live camera viewport
+    const camLeft = this.cameras.main.scrollX;
+    const camRight = camLeft + this.cameras.main.width;
+    const minLoopX = Math.min(-320, camLeft - 380);
+    const maxLoopX = Math.max(this.WORLD_WIDTH + 320, camRight + 380);
 
     for (const ship of this.ships) {
       ship.sprite.x += ship.vx * dt;
       if (ship.vx > 0 && ship.sprite.x > maxLoopX) {
-        ship.sprite.x -= maxLoopX - minLoopX;
+        ship.sprite.x = minLoopX;
       } else if (ship.vx < 0 && ship.sprite.x < minLoopX) {
-        ship.sprite.x += maxLoopX - minLoopX;
+        ship.sprite.x = maxLoopX;
       }
 
       // Draw V-shaped churning wake behind the vessel
