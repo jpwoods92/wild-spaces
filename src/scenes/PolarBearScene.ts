@@ -762,17 +762,16 @@ export class PolarBearScene extends Phaser.Scene {
     this.hudGraphics = this.add.graphics().setScrollFactor(0).setDepth(100);
 
     this.hudLevelLabel = this.add
-      .text(28, 20, '', {
-        fontSize: '10px',
+      .text(28, 22, '', {
+        fontSize: '11px',
         fontStyle: 'bold',
         color: '#38bdf8',
-        letterSpacing: 1.5,
       })
       .setScrollFactor(0)
       .setDepth(101);
 
     this.hudHeroDistanceText = this.add
-      .text(28, 36, '', {
+      .text(28, 40, '', {
         fontSize: '26px',
         fontStyle: 'bold',
         color: '#ffffff',
@@ -781,7 +780,7 @@ export class PolarBearScene extends Phaser.Scene {
       .setDepth(101);
 
     this.hudSubDistanceText = this.add
-      .text(0, 45, 'to Sanctuary', {
+      .text(0, 49, 'to Sanctuary', {
         fontSize: '12px',
         color: '#94a3b8',
       })
@@ -1459,38 +1458,38 @@ export class PolarBearScene extends Phaser.Scene {
     );
 
     // 1. Minimalist Top-Left Migration Card (Clear Visual Hierarchy)
-    this.hudLevelLabel.setText(`LEVEL ${this.level}  •  MIGRATION NORTH`);
+    this.hudLevelLabel.setText(`LEVEL ${this.level}`);
     this.hudHeroDistanceText.setText(`${metersRemaining}m`);
     this.hudSubDistanceText.setPosition(
       this.hudHeroDistanceText.x + this.hudHeroDistanceText.width + 8,
-      46
+      49
     );
 
-    const cardW = Math.max(
-      196,
-      this.hudHeroDistanceText.width + this.hudSubDistanceText.width + 42
-    );
-    const cardH = 76;
+    const distanceRowRight =
+      this.hudSubDistanceText.x + this.hudSubDistanceText.width;
+    const levelRowRight = this.hudLevelLabel.x + this.hudLevelLabel.width;
+    const cardW = Math.max(216, distanceRowRight - 16 + 20, levelRowRight - 16 + 20);
+    const cardH = 84;
 
-    this.hudGraphics.fillStyle(0x06121e, 0.84);
+    this.hudGraphics.fillStyle(0x06121e, 0.86);
     this.hudGraphics.fillRoundedRect(16, 12, cardW, cardH, 10);
     this.hudGraphics.lineStyle(1, 0x38bdf8, 0.25);
     this.hudGraphics.strokeRoundedRect(16, 12, cardW, cardH, 10);
 
     // Slim northward progress bar inside top-left card
     const progX = 28;
-    const progY = 72;
+    const progY = 78;
     const progW = cardW - 24;
     this.hudGraphics.fillStyle(0x0f172a, 0.95);
-    this.hudGraphics.fillRoundedRect(progX, progY, progW, 5, 2);
+    this.hudGraphics.fillRoundedRect(progX, progY, progW, 6, 3);
     if (progressPct > 0.01) {
       this.hudGraphics.fillStyle(0x38bdf8, 0.95);
       this.hudGraphics.fillRoundedRect(
         progX,
         progY,
         Math.max(4, progW * progressPct),
-        5,
-        2
+        6,
+        3
       );
     }
 
@@ -1509,24 +1508,18 @@ export class PolarBearScene extends Phaser.Scene {
   private renderBearWorldUI(): void {
     this.bearUiGraphics.clear();
 
-    const barW = 68;
+    const barW = 72;
     const barH = 9;
     const bx = this.bearX - barW / 2;
-    const by = this.bearY - 40;
+    // Place the Stamina bar well above the bear's head/snout (58px above center)
+    const by = this.bearY - 58;
 
-    // Outer dark pill container
     const onCrackingFloe =
       this.isOnIce && this.currentFloe && !this.currentFloe.isSanctuary;
-    const totalBoxH = onCrackingFloe ? barH + 8 : barH + 2;
 
+    // 1. Stamina Bar backdrop pill
     this.bearUiGraphics.fillStyle(0x040d17, 0.9);
-    this.bearUiGraphics.fillRoundedRect(
-      bx - 2,
-      by - 1,
-      barW + 4,
-      totalBoxH,
-      4
-    );
+    this.bearUiGraphics.fillRoundedRect(bx - 2, by - 2, barW + 4, barH + 4, 4);
 
     // Locked / Depleted Max Stamina Ceiling (dark crimson right side + tick mark)
     const clampedMax = Phaser.Math.Clamp(this.maxStamina / 100, 0.2, 1);
@@ -1558,7 +1551,7 @@ export class PolarBearScene extends Phaser.Scene {
       );
     }
 
-    // Ice Fracture Countdown Bar + Tag directly over the bear when standing on cracking ice
+    // 2. Ice Fracture Countdown Bar + Tag (with clear vertical separation)
     if (onCrackingFloe && this.currentFloe) {
       const secsLeft = Math.max(
         0,
@@ -1570,19 +1563,32 @@ export class PolarBearScene extends Phaser.Scene {
         1
       );
 
-      const iceBarY = by + barH + 2;
+      // Separate pill 7px below the Stamina bar
+      const iceBarY = by + barH + 7;
+      const iceBarH = 5;
+      this.bearUiGraphics.fillStyle(0x040d17, 0.9);
+      this.bearUiGraphics.fillRoundedRect(
+        bx - 2,
+        iceBarY - 1,
+        barW + 4,
+        iceBarH + 2,
+        3
+      );
+
       this.bearUiGraphics.fillStyle(
         secsLeft < 1.5 ? 0xef4444 : 0xf59e0b,
         0.95
       );
-      this.bearUiGraphics.fillRect(
+      this.bearUiGraphics.fillRoundedRect(
         bx,
         iceBarY,
         Math.max(2, barW * lifePct),
-        4
+        iceBarH,
+        2
       );
 
-      this.bearUiTagText.setPosition(this.bearX, by - 3);
+      // Float the countdown text 8px above the top of the Stamina bar
+      this.bearUiTagText.setPosition(this.bearX, by - 8);
       this.bearUiTagText.setColor(secsLeft < 1.5 ? '#f87171' : '#fbbf24');
       this.bearUiTagText.setText(`${secsLeft.toFixed(1)}s`);
     } else {
