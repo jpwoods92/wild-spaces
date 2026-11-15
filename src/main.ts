@@ -7,6 +7,13 @@ import {
 } from './scenes/PolarBearScene';
 import { WhaleScene, WhaleSceneData } from './scenes/WhaleScene';
 import { POLAR_BEAR_ASSETS, WHALE_ASSETS } from './config/AssetManifest';
+import {
+  formatDuration,
+  getAllEpisodeBestByLevel,
+  getLeaderboardEntries,
+  LeaderboardEntry,
+  recordLevelCompletion,
+} from './utils/LeaderboardStore';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -41,6 +48,8 @@ const winState = window as unknown as {
     swimMeters: number;
     sealsCaught: number;
     floesCollapsed: number;
+    levelTimeSeconds: number;
+    totalTimeSeconds: number;
     nextLevelData: PolarBearSceneData;
   }) => void;
   showWhaleImpactModal: (payload: {
@@ -53,6 +62,8 @@ const winState = window as unknown as {
     nextLevelMeters: number;
     bloomsConsumed: number;
     entanglementsHit: number;
+    levelTimeSeconds: number;
+    totalTimeSeconds: number;
     nextLevelData: WhaleSceneData;
   }) => void;
 };
@@ -79,6 +90,70 @@ btnInfiniteToggle.addEventListener('click', () => {
   syncInfiniteButtonUI();
 });
 
+function renderImpactLeaderboard(params: {
+  episodeId: string;
+  episodeLabel: string;
+  level: number;
+  won: boolean;
+  levelTimeSeconds: number;
+  totalTimeSeconds: number;
+  totalMeters: number;
+}): void {
+  const lbTitle = document.getElementById('impact-leaderboard-title')!;
+  const lbBadge = document.getElementById('impact-leaderboard-badge')!;
+  const lbList = document.getElementById('impact-leaderboard-list')!;
+
+  let entries: LeaderboardEntry[] = [];
+  let highlightRank: number | null = null;
+  let isNewBest = false;
+
+  if (params.won) {
+    const res = recordLevelCompletion({
+      episodeId: params.episodeId,
+      level: params.level,
+      levelTimeSeconds: params.levelTimeSeconds,
+      totalTimeSeconds: params.totalTimeSeconds,
+      totalMeters: params.totalMeters,
+    });
+    entries = res.entries;
+    highlightRank = res.rank;
+    isNewBest = res.isNewBest;
+  } else {
+    entries = getLeaderboardEntries(params.episodeId, params.level);
+  }
+
+  lbTitle.textContent = `⏱ Personal Best Times • ${params.episodeLabel} (Level ${params.level})`;
+  if (params.won && isNewBest) {
+    lbBadge.textContent = '★ NEW PERSONAL BEST!';
+    lbBadge.style.color = '#34d399';
+  } else {
+    lbBadge.textContent = 'Saved on This Device';
+    lbBadge.style.color = '#94a3b8';
+  }
+
+  if (entries.length === 0) {
+    lbList.innerHTML = `<li class="leaderboard-row"><span>No completed runs recorded for Level ${params.level} yet.</span><span>—</span></li>`;
+    return;
+  }
+
+  lbList.innerHTML = entries
+    .map((entry, idx) => {
+      const rank = idx + 1;
+      const isCurrent = highlightRank === rank;
+      const dateStr = new Date(entry.completedAtIso).toLocaleDateString(
+        undefined,
+        { month: 'short', day: 'numeric' }
+      );
+      return `<li class="leaderboard-row${isCurrent ? ' highlight' : ''}">
+        <span>#${rank} • ${formatDuration(entry.levelTimeSeconds)}${
+        isCurrent ? ' (This Run)' : ''
+      }</span>
+        <span style="color:#94a3b8; font-size:11px;">${entry.totalMeters}m • ${dateStr}</span>
+      </li>`;
+    })
+    .join('');
+}
+
 // Expose impact modal hook for Episode 1 (PolarBearScene)
 winState.showPolarBearImpactModal = (payload) => {
   activeEpisodeKey = 'PolarBearScene';
@@ -91,6 +166,8 @@ winState.showPolarBearImpactModal = (payload) => {
   const statSwumLabel = document.getElementById('stat-swum-label')!;
   const statSeals = document.getElementById('stat-seals')!;
   const statSealsLabel = document.getElementById('stat-seals-label')!;
+  const statTime = document.getElementById('stat-time')!;
+  const statTimeLabel = document.getElementById('stat-time-label')!;
   const factHeading = document.getElementById('impact-fact-heading')!;
   const factBody = document.getElementById('impact-fact')!;
 
@@ -100,7 +177,9 @@ winState.showPolarBearImpactModal = (payload) => {
     tag.className = 'modal-tag success';
     tag.textContent = `Episode 1 • Level ${payload.level} Complete`;
     title.textContent = 'You Reached the Northern Pack Ice';
-    summary.textContent = `You navigated ${payload.levelTargetMeters}m north and reunited with your cub (${payload.floesCollapsed} ice patches shattered along the way). Continue north into Level ${
+    summary.textContent = `You navigated ${payload.levelTargetMeters}m north in ${formatDuration(
+      payload.levelTimeSeconds
+    )} and reunited with your cub (${payload.floesCollapsed} ice patches shattered along the way). Continue north into Level ${
       payload.level + 1
     } (${payload.nextLevelMeters}m) where ice patches and seals grow even scarcer!`;
     btnNextLevel.style.display = 'inline-flex';
@@ -125,6 +204,20 @@ winState.showPolarBearImpactModal = (payload) => {
   statSwumLabel.textContent = 'Open-Water Swim';
   statSeals.textContent = `${payload.sealsCaught}`;
   statSealsLabel.textContent = 'Seals Caught';
+  statTime.textContent = formatDuration(payload.levelTimeSeconds);
+  statTimeLabel.textContent = payload.won
+    ? `Level ${payload.level} Time`
+    : 'Time Survived';
+
+  renderImpactLeaderboard({
+    episodeId: 'PolarBearScene',
+    episodeLabel: 'Polar Bear',
+    level: payload.level,
+    won: payload.won,
+    levelTimeSeconds: payload.levelTimeSeconds,
+    totalTimeSeconds: payload.totalTimeSeconds,
+    totalMeters: payload.totalMetersMigrated,
+  });
 
   factHeading.textContent = 'Real-World Arctic Crisis';
   factBody.textContent =
@@ -145,6 +238,8 @@ winState.showWhaleImpactModal = (payload) => {
   const statSwumLabel = document.getElementById('stat-swum-label')!;
   const statSeals = document.getElementById('stat-seals')!;
   const statSealsLabel = document.getElementById('stat-seals-label')!;
+  const statTime = document.getElementById('stat-time')!;
+  const statTimeLabel = document.getElementById('stat-time-label')!;
   const factHeading = document.getElementById('impact-fact-heading')!;
   const factBody = document.getElementById('impact-fact')!;
 
@@ -153,10 +248,12 @@ winState.showWhaleImpactModal = (payload) => {
   if (payload.won) {
     tag.className = 'modal-tag success';
     tag.textContent = `Episode 2 • Level ${payload.level} Complete`;
-    title.textContent = 'Reunited in the Northern Sanctuary';
-    summary.textContent = `Following your calf’s answering echoes through dark Atlantic waters, you navigated ${payload.levelTargetMeters}m north to the feeding sanctuary. Continue into Level ${
+    title.textContent = 'Reunited in the Calving Sanctuary';
+    summary.textContent = `Following your calf’s answering echoes through dark Atlantic waters, you navigated ${payload.levelTargetMeters}m in ${formatDuration(
+      payload.levelTimeSeconds
+    )} to the sanctuary. Continue into Level ${
       payload.level + 1
-    } (${payload.nextLevelMeters}m) where plankton blooms grow scarcer and acoustic noise intensifies!`;
+    } (${payload.nextLevelMeters}m) where plankton blooms grow scarcer and decoy echoes emerge!`;
     btnNextLevel.style.display = 'inline-flex';
     btnNextLevel.textContent = `Continue Migration (Level ${payload.level + 1} • ${payload.nextLevelMeters}m →)`;
   } else if (payload.deathReason === 'ship') {
@@ -179,6 +276,20 @@ winState.showWhaleImpactModal = (payload) => {
   statSwumLabel.textContent = 'Plankton Blooms Fed';
   statSeals.textContent = `${payload.entanglementsHit}`;
   statSealsLabel.textContent = 'Gear Entanglements';
+  statTime.textContent = formatDuration(payload.levelTimeSeconds);
+  statTimeLabel.textContent = payload.won
+    ? `Level ${payload.level} Time`
+    : 'Time Survived';
+
+  renderImpactLeaderboard({
+    episodeId: 'WhaleScene',
+    episodeLabel: 'Right Whale',
+    level: payload.level,
+    won: payload.won,
+    levelTimeSeconds: payload.levelTimeSeconds,
+    totalTimeSeconds: payload.totalTimeSeconds,
+    totalMeters: payload.totalMetersMigrated,
+  });
 
   factHeading.textContent = 'North Atlantic Right Whale Crisis (<360 Left)';
   factBody.textContent =
@@ -211,6 +322,69 @@ document.getElementById('btn-impact-hub')?.addEventListener('click', () => {
   game.scene.stop('PolarBearScene');
   game.scene.stop('WhaleScene');
   game.scene.start('HubScene');
+});
+
+// Topbar: Personal Leaderboard Modal (All Episodes)
+document.getElementById('btn-leaderboard')?.addEventListener('click', () => {
+  const tag = document.getElementById('info-tag')!;
+  const title = document.getElementById('info-title')!;
+  const body = document.getElementById('info-body')!;
+
+  tag.className = 'modal-tag success';
+  tag.textContent = 'Personal Skill Tracker (Local Storage)';
+  title.textContent = 'Personal Best Completion Times';
+
+  const renderEpisodeSection = (episodeId: string, label: string): string => {
+    const bests = getAllEpisodeBestByLevel(episodeId);
+    if (bests.length === 0) {
+      return `
+        <div class="leaderboard-box" style="margin-bottom:14px;">
+          <div class="leaderboard-header"><span>${label}</span><span>No Completions Yet</span></div>
+          <p style="font-size:12px; color:#94a3b8;">Complete a level to record your personal best time on this device.</p>
+        </div>
+      `;
+    }
+    const items = bests
+      .map((entry) => {
+        const topList = getLeaderboardEntries(episodeId, entry.level);
+        const subText =
+          topList.length > 1
+            ? `Top ${topList.length}: ${topList
+                .map((e) => formatDuration(e.levelTimeSeconds))
+                .join(' • ')}`
+            : `1 run recorded`;
+        return `<li class="leaderboard-row">
+          <span><strong>Level ${entry.level}</strong> — Fastest: <strong style="color:#6ee7b7;">${formatDuration(
+          entry.levelTimeSeconds
+        )}</strong></span>
+          <span style="font-size:11px; color:#94a3b8;">${subText}</span>
+        </li>`;
+      })
+      .join('');
+
+    return `
+      <div class="leaderboard-box" style="margin-bottom:14px;">
+        <div class="leaderboard-header"><span>${label}</span><span>Fastest Per Level</span></div>
+        <ul class="leaderboard-list">${items}</ul>
+      </div>
+    `;
+  };
+
+  body.innerHTML = `
+    <p style="margin-bottom: 12px;">
+      Your fastest completion times for every episode and level are saved automatically in your browser’s <code>localStorage</code> so you can track your skill over time.
+    </p>
+    ${renderEpisodeSection(
+      'PolarBearScene',
+      'Episode 1 • The Thinning North (Polar Bear)'
+    )}
+    ${renderEpisodeSection(
+      'WhaleScene',
+      'Episode 2 • Drowned Echoes (Right Whale)'
+    )}
+  `;
+
+  infoModal.classList.add('active');
 });
 
 // Topbar: Switch to World Habitat Map

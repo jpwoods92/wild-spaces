@@ -1,4 +1,9 @@
 import Phaser from 'phaser';
+import {
+  formatDuration,
+  formatHudClock,
+  recordLevelCompletion,
+} from '../utils/LeaderboardStore';
 
 interface IceFloe {
   id: number;
@@ -44,6 +49,7 @@ export interface PolarBearSceneData {
   totalSwimMeters?: number;
   sealsCaught?: number;
   floesCollapsed?: number;
+  cumulativeTimeSeconds?: number;
 }
 
 export class PolarBearScene extends Phaser.Scene {
@@ -91,6 +97,8 @@ export class PolarBearScene extends Phaser.Scene {
 
   // Run telemetry (persists across levels in Infinite Mode)
   private cumulativeMetersBeforeLevel = 0;
+  private cumulativeTimeBeforeLevel = 0;
+  private levelElapsedSeconds = 0;
   private totalSwimMeters = 0;
   private sealsCaught = 0;
   private floesCollapsed = 0;
@@ -148,6 +156,8 @@ export class PolarBearScene extends Phaser.Scene {
 
     // Carry over run telemetry if advancing to Level 2+
     this.cumulativeMetersBeforeLevel = data?.cumulativeMeters ?? 0;
+    this.cumulativeTimeBeforeLevel = data?.cumulativeTimeSeconds ?? 0;
+    this.levelElapsedSeconds = 0;
     this.totalSwimMeters = data?.totalSwimMeters ?? 0;
     this.sealsCaught = data?.sealsCaught ?? 0;
     this.floesCollapsed = data?.floesCollapsed ?? 0;
@@ -834,6 +844,7 @@ export class PolarBearScene extends Phaser.Scene {
     if (this.gameEnded) return;
 
     const dt = Math.min(deltaMs / 1000, 0.05);
+    this.levelElapsedSeconds += dt;
 
     // 1. Update Drifting & Melting Ice Floes
     this.updateIceFloes(dt);
@@ -1337,6 +1348,8 @@ export class PolarBearScene extends Phaser.Scene {
       totalSwimMeters: Math.round(this.totalSwimMeters),
       sealsCaught: this.sealsCaught,
       floesCollapsed: this.floesCollapsed,
+      cumulativeTimeSeconds:
+        this.cumulativeTimeBeforeLevel + this.levelElapsedSeconds,
     };
   }
 
@@ -1351,14 +1364,29 @@ export class PolarBearScene extends Phaser.Scene {
       );
 
       if (isInfiniteMode) {
+        const totalTime =
+          this.cumulativeTimeBeforeLevel + this.levelElapsedSeconds;
+        const totalMeters =
+          this.cumulativeMetersBeforeLevel + this.levelTargetMeters;
+        const res = recordLevelCompletion({
+          episodeId: 'PolarBearScene',
+          level: this.level,
+          levelTimeSeconds: this.levelElapsedSeconds,
+          totalTimeSeconds: totalTime,
+          totalMeters,
+        });
+
         const nextLevel = this.level + 1;
         const nextMeters =
           this.BASE_LEVEL_METERS +
           (nextLevel - 1) * this.METERS_PER_LEVEL_INCREMENT;
+        const pbSuffix = res.isNewBest
+          ? ` (NEW BEST ${formatDuration(this.levelElapsedSeconds)}!)`
+          : ` (${formatDuration(this.levelElapsedSeconds)})`;
         this.spawnFloatingText(
           this.bearX,
           this.bearY - 24,
-          `★ LEVEL ${this.level} COMPLETE! +20% MAX STAMINA → LEVEL ${nextLevel} (${nextMeters}m)`,
+          `★ LEVEL ${this.level} COMPLETE${pbSuffix} → LEVEL ${nextLevel} (${nextMeters}m)`,
           '#34d399'
         );
         this.renderHUD();
@@ -1413,6 +1441,8 @@ export class PolarBearScene extends Phaser.Scene {
         swimMeters: number;
         sealsCaught: number;
         floesCollapsed: number;
+        levelTimeSeconds: number;
+        totalTimeSeconds: number;
         nextLevelData: PolarBearSceneData;
       }) => void;
     }).showPolarBearImpactModal;
@@ -1429,6 +1459,9 @@ export class PolarBearScene extends Phaser.Scene {
         swimMeters: Math.round(this.totalSwimMeters),
         sealsCaught: this.sealsCaught,
         floesCollapsed: this.floesCollapsed,
+        levelTimeSeconds: this.levelElapsedSeconds,
+        totalTimeSeconds:
+          this.cumulativeTimeBeforeLevel + this.levelElapsedSeconds,
         nextLevelData: this.getNextLevelData(),
       });
     }
@@ -1451,8 +1484,10 @@ export class PolarBearScene extends Phaser.Scene {
       1
     );
 
-    // 1. Minimalist Top-Left Migration Card (Clear Visual Hierarchy)
-    this.hudLevelLabel.setText(`LEVEL ${this.level}`);
+    // 1. Minimalist Top-Left Migration Card (Clear Visual Hierarchy + Live Timer)
+    this.hudLevelLabel.setText(
+      `LEVEL ${this.level}  •  ⏱ ${formatHudClock(this.levelElapsedSeconds)}`
+    );
     this.hudHeroDistanceText.setText(`${metersRemaining}m`);
     this.hudSubDistanceText.setPosition(
       this.hudHeroDistanceText.x + this.hudHeroDistanceText.width + 8,

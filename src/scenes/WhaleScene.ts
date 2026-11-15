@@ -1,4 +1,9 @@
 import Phaser from 'phaser';
+import {
+  formatDuration,
+  formatHudClock,
+  recordLevelCompletion,
+} from '../utils/LeaderboardStore';
 
 interface CopepodBloom {
   x: number;
@@ -66,6 +71,7 @@ export interface WhaleSceneData {
   cumulativeSwum?: number;
   cumulativeBlooms?: number;
   cumulativeEntanglements?: number;
+  cumulativeTimeSeconds?: number;
 }
 
 export class WhaleScene extends Phaser.Scene {
@@ -87,6 +93,8 @@ export class WhaleScene extends Phaser.Scene {
   private goalY = 1400;
 
   private cumulativeMetersBeforeLevel = 0;
+  private cumulativeTimeBeforeLevel = 0;
+  private levelElapsedSeconds = 0;
   private cumulativeSwumBeforeLevel = 0;
   private cumulativeBloomsBeforeLevel = 0;
   private cumulativeEntanglementsBeforeLevel = 0;
@@ -159,6 +167,8 @@ export class WhaleScene extends Phaser.Scene {
   init(data?: WhaleSceneData): void {
     this.level = data?.level && data.level >= 1 ? Math.floor(data.level) : 1;
     this.cumulativeMetersBeforeLevel = data?.cumulativeMeters ?? 0;
+    this.cumulativeTimeBeforeLevel = data?.cumulativeTimeSeconds ?? 0;
+    this.levelElapsedSeconds = 0;
     this.cumulativeSwumBeforeLevel = data?.cumulativeSwum ?? 0;
     this.cumulativeBloomsBeforeLevel = data?.cumulativeBlooms ?? 0;
     this.cumulativeEntanglementsBeforeLevel = data?.cumulativeEntanglements ?? 0;
@@ -285,6 +295,7 @@ export class WhaleScene extends Phaser.Scene {
     this.echoBeacons = [];
     this.announcedDecoyLock = false;
     this.isEnding = false;
+    this.levelElapsedSeconds = 0;
     this.maxNorthMetersInLevel = 0;
     this.currentMetersToCalf = this.migrationDistanceMeters;
     this.swimPixels = 0;
@@ -942,6 +953,7 @@ export class WhaleScene extends Phaser.Scene {
     if (this.isEnding) return;
 
     const dt = delta / 1000;
+    this.levelElapsedSeconds += dt;
 
     if (this.callCooldownTimer > 0) {
       this.callCooldownTimer = Math.max(0, this.callCooldownTimer - dt);
@@ -1512,6 +1524,14 @@ export class WhaleScene extends Phaser.Scene {
       )
     );
 
+    const levelHeader =
+      this.level > 1
+        ? `EPISODE 02 • LEVEL ${this.level}  •  ⏱ ${formatHudClock(
+            this.levelElapsedSeconds
+          )}`
+        : `EPISODE 02  •  ⏱ ${formatHudClock(this.levelElapsedSeconds)}`;
+    this.hudLevelLabel.setText(levelHeader);
+
     this.hudDistanceText.setText(`${this.maxNorthMetersInLevel}m`);
     this.hudSubDistanceText.setPosition(
       this.hudDistanceText.x + this.hudDistanceText.width + 8,
@@ -1707,6 +1727,8 @@ export class WhaleScene extends Phaser.Scene {
     const totalBlooms = this.cumulativeBloomsBeforeLevel + this.bloomsConsumed;
     const totalEntanglements =
       this.cumulativeEntanglementsBeforeLevel + this.entanglementsHit;
+    const totalTimeSeconds =
+      this.cumulativeTimeBeforeLevel + this.levelElapsedSeconds;
 
     const nextLevelData: WhaleSceneData = {
       level: this.level + 1,
@@ -1714,6 +1736,7 @@ export class WhaleScene extends Phaser.Scene {
       cumulativeSwum: totalSwimMeters,
       cumulativeBlooms: totalBlooms,
       cumulativeEntanglements: totalEntanglements,
+      cumulativeTimeSeconds: totalTimeSeconds,
     };
 
     const winState = window as unknown as {
@@ -1728,13 +1751,32 @@ export class WhaleScene extends Phaser.Scene {
         nextLevelMeters: number;
         bloomsConsumed: number;
         entanglementsHit: number;
+        levelTimeSeconds: number;
+        totalTimeSeconds: number;
         nextLevelData: WhaleSceneData;
       }) => void;
     };
 
     if (won && winState.wildSpacesInfiniteMode) {
-      this.cameras.main.fadeOut(500, 4, 13, 23);
-      this.time.delayedCall(520, () => {
+      const res = recordLevelCompletion({
+        episodeId: 'WhaleScene',
+        level: this.level,
+        levelTimeSeconds: this.levelElapsedSeconds,
+        totalTimeSeconds,
+        totalMeters: totalMetersMigrated,
+      });
+      const pbSuffix = res.isNewBest
+        ? ` (NEW BEST ${formatDuration(this.levelElapsedSeconds)}!)`
+        : ` (${formatDuration(this.levelElapsedSeconds)})`;
+      this.showFloatingNotice(
+        this.whaleX,
+        this.whaleY - 40,
+        `★ LEVEL ${this.level} COMPLETE${pbSuffix}`,
+        '#34d399'
+      );
+
+      this.cameras.main.fadeOut(700, 4, 13, 23);
+      this.time.delayedCall(720, () => {
         this.scene.restart(nextLevelData);
       });
       return;
@@ -1753,6 +1795,8 @@ export class WhaleScene extends Phaser.Scene {
             this.migrationDistanceMeters + this.METERS_PER_LEVEL_STEP,
           bloomsConsumed: totalBlooms,
           entanglementsHit: totalEntanglements,
+          levelTimeSeconds: this.levelElapsedSeconds,
+          totalTimeSeconds,
           nextLevelData,
         });
       }

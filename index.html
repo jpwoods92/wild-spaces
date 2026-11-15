@@ -223,9 +223,54 @@
 
       .stats-grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(4, 1fr);
         gap: 10px;
-        margin-bottom: 18px;
+        margin-bottom: 16px;
+      }
+
+      .leaderboard-box {
+        background: rgba(10, 24, 40, 0.85);
+        border: 1px solid rgba(56, 189, 248, 0.22);
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin-bottom: 16px;
+      }
+
+      .leaderboard-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #7dd3fc;
+        margin-bottom: 8px;
+      }
+
+      .leaderboard-list {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        font-size: 12px;
+        color: #cbd5e1;
+      }
+
+      .leaderboard-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px 8px;
+        border-radius: 5px;
+        background: rgba(15, 34, 54, 0.65);
+      }
+
+      .leaderboard-row.highlight {
+        background: rgba(52, 211, 153, 0.16);
+        border: 1px solid rgba(52, 211, 153, 0.45);
+        color: #6ee7b7;
+        font-weight: 700;
       }
 
       .stat-box {
@@ -298,6 +343,9 @@
         <button class="btn" id="btn-infinite-toggle" title="Toggle endless level progression with escalating difficulty">
           ∞ Infinite Mode: OFF
         </button>
+        <button class="btn" id="btn-leaderboard" title="View your personal best completion times (stored locally)">
+          ⏱ Personal Bests
+        </button>
         <button class="btn" id="btn-hub">World Habitat Map</button>
         <button class="btn" id="btn-artist-spec">Artist Asset Spec</button>
         <button class="btn btn-donate" id="btn-charity">Support Wildlife (WWF)</button>
@@ -328,6 +376,18 @@
             <div class="stat-val" id="stat-seals">3</div>
             <div class="stat-label" id="stat-seals-label">Seals Caught</div>
           </div>
+          <div class="stat-box">
+            <div class="stat-val" id="stat-time">0:45.20</div>
+            <div class="stat-label" id="stat-time-label">Completion Time</div>
+          </div>
+        </div>
+
+        <div class="leaderboard-box" id="impact-leaderboard-box">
+          <div class="leaderboard-header">
+            <span id="impact-leaderboard-title">Personal Leaderboard (Level 1)</span>
+            <span id="impact-leaderboard-badge">Local Device Only</span>
+          </div>
+          <ul class="leaderboard-list" id="impact-leaderboard-list"></ul>
         </div>
 
         <div class="fact-callout">
