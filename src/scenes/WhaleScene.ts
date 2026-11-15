@@ -93,6 +93,7 @@ export class WhaleScene extends Phaser.Scene {
   private entangleStruggleProgress = 0;
   private noiseMaskingTimer = 0;
   private callCooldownTimer = 0;
+  private callCooldownMax = 2.6;
   private calfBeaconTimer = 0;
   private isEnding = false;
 
@@ -250,6 +251,7 @@ export class WhaleScene extends Phaser.Scene {
     this.entangleStruggleProgress = 0;
     this.noiseMaskingTimer = 0;
     this.callCooldownTimer = 0;
+    this.callCooldownMax = 2.6;
     this.calfBeaconTimer = 0;
     this.isEnding = false;
     this.maxNorthMetersInLevel = 0;
@@ -680,11 +682,7 @@ export class WhaleScene extends Phaser.Scene {
 
   private emitWhaleCall(isInitialFreeCall = false): void {
     if (!isInitialFreeCall) {
-      if (this.callCooldownTimer > 0) return;
-      this.callCooldownTimer = 1.15;
-      this.stamina = Math.max(0, this.stamina - 3.5);
-
-      // Singing/thrashing when entangled helps loosen 1 rope stack
+      // Singing/thrashing when entangled helps loosen 1 rope stack even if voice is recovering
       if (this.entangledStacks > 0) {
         this.entangleStruggleProgress += 0.38;
         if (this.entangleStruggleProgress >= 1) {
@@ -698,6 +696,28 @@ export class WhaleScene extends Phaser.Scene {
           );
         }
       }
+
+      if (this.callCooldownTimer > 0) {
+        this.showFloatingNotice(
+          this.whaleX,
+          this.whaleY - 44,
+          this.noiseMaskingTimer > 0
+            ? `SONAR DISRUPTED (${this.callCooldownTimer.toFixed(1)}s)`
+            : `SONAR RECHARGING (${this.callCooldownTimer.toFixed(1)}s)`,
+          this.noiseMaskingTimer > 0 ? '#fbbf24' : '#94a3b8'
+        );
+        return;
+      }
+
+      // Base sonar cooldown is 2.6s; acoustic noise disruption makes the cooldown significantly longer
+      const baseCooldown = 2.6;
+      const disruptedPenalty =
+        this.noiseMaskingTimer > 0
+          ? 1.6 + Math.min(1.2, (this.level - 1) * 0.25)
+          : 0;
+      this.callCooldownMax = baseCooldown + disruptedPenalty;
+      this.callCooldownTimer = this.callCooldownMax;
+      this.stamina = Math.max(0, this.stamina - 4.0);
     }
 
     // If masked by vessel noise, call range is reduced according to current level scaling
@@ -1050,10 +1070,23 @@ export class WhaleScene extends Phaser.Scene {
         );
         if (Math.abs(distToWhale - wave.radius) < 22) {
           const { maskingDuration } = this.getDifficultyProfile();
+          const wasAlreadyMasked = this.noiseMaskingTimer > 0.2;
           this.noiseMaskingTimer = Math.max(
             this.noiseMaskingTimer,
             maskingDuration
           );
+          // Acoustic disruption directly lengthens / adds delay to the sonar cooldown
+          if (!wasAlreadyMasked) {
+            const addedDelay = 1.25 + Math.min(1.0, (this.level - 1) * 0.2);
+            this.callCooldownTimer = Math.min(
+              6.0,
+              this.callCooldownTimer + addedDelay
+            );
+            this.callCooldownMax = Math.max(
+              this.callCooldownMax,
+              this.callCooldownTimer
+            );
+          }
           // Chronic noise stress erodes max stamina slightly
           this.maxStamina = Math.max(20, this.maxStamina - 3.2 * dt);
           this.stamina = Math.min(this.stamina, this.maxStamina);
@@ -1427,6 +1460,38 @@ export class WhaleScene extends Phaser.Scene {
       this.bearUiTagText.setColor('#fb923c');
       this.bearUiTagText.setText(
         `ENTANGLED ×${this.entangledStacks} (SPACE / FEED)`
+      );
+    } else if (this.callCooldownTimer > 0) {
+      // Show Sonar Cooldown bar (amber/longer when disrupted by noise, indigo/cyan normally)
+      const isDisrupted = this.noiseMaskingTimer > 0;
+      const cooldownPct = Phaser.Math.Clamp(
+        this.callCooldownTimer / Math.max(0.1, this.callCooldownMax),
+        0,
+        1
+      );
+      this.bearUiGraphics.fillStyle(0x040d17, 0.9);
+      this.bearUiGraphics.fillRoundedRect(
+        bx - 2,
+        topBarY - 1,
+        barW + 4,
+        topBarH + 2,
+        3
+      );
+      this.bearUiGraphics.fillStyle(isDisrupted ? 0xf59e0b : 0x818cf8, 0.95);
+      this.bearUiGraphics.fillRoundedRect(
+        bx,
+        topBarY,
+        Math.max(3, barW * cooldownPct),
+        topBarH,
+        2
+      );
+
+      this.bearUiTagText.setPosition(this.whaleX, topBarY - 8);
+      this.bearUiTagText.setColor(isDisrupted ? '#fbbf24' : '#a5b4fc');
+      this.bearUiTagText.setText(
+        isDisrupted
+          ? `SONAR DISRUPTED • ${this.callCooldownTimer.toFixed(1)}s`
+          : `SONAR COOLDOWN • ${this.callCooldownTimer.toFixed(1)}s`
       );
     } else if (this.noiseMaskingTimer > 0) {
       const maskPct = Phaser.Math.Clamp(this.noiseMaskingTimer / 2.2, 0, 1);
