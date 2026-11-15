@@ -672,19 +672,13 @@ export class PolarBearScene extends Phaser.Scene {
         centerCorridorY + 155
       );
 
-      // Dashed lane dividers
-      laneGraphics.lineStyle(1, 0xfbbf24, 0.18);
+      // Center lane divider between the 2 opposing shipping channels
+      laneGraphics.lineStyle(1, 0xfbbf24, 0.2);
       laneGraphics.lineBetween(
         0,
-        centerCorridorY - 48,
+        centerCorridorY,
         this.WORLD_WIDTH,
-        centerCorridorY - 48
-      );
-      laneGraphics.lineBetween(
-        0,
-        centerCorridorY + 48,
-        this.WORLD_WIDTH,
-        centerCorridorY + 48
+        centerCorridorY
       );
 
       this.add
@@ -703,26 +697,20 @@ export class PolarBearScene extends Phaser.Scene {
         .setAlpha(0.85)
         .setDepth(2);
 
-      const speedBoost = Math.min(75, (this.level - 1) * 14);
-      // 3 distinct lanes of fast vessel traffic with alternating directions & speeds
+      const speedBoost = Math.min(36, (this.level - 1) * 8);
+      // 2 lanes of vessel traffic with 2 ships per lane and moderate speeds
       const lanes = [
         {
-          y: centerCorridorY - 92,
-          vx: 255 + speedBoost,
-          shipsInLane: 4,
+          y: centerCorridorY - 62,
+          vx: 175 + speedBoost,
+          shipsInLane: 2,
           phaseOffset: 0,
         },
         {
-          y: centerCorridorY,
-          vx: -(295 + speedBoost),
-          shipsInLane: 4,
-          phaseOffset: 140,
-        },
-        {
-          y: centerCorridorY + 92,
-          vx: 235 + speedBoost,
-          shipsInLane: 4,
-          phaseOffset: 260,
+          y: centerCorridorY + 62,
+          vx: -(195 + speedBoost),
+          shipsInLane: 2,
+          phaseOffset: 440,
         },
       ];
 
@@ -1511,8 +1499,8 @@ export class PolarBearScene extends Phaser.Scene {
     const barW = 72;
     const barH = 9;
     const bx = this.bearX - barW / 2;
-    // Place the Stamina bar well above the bear's head/snout (58px above center)
-    const by = this.bearY - 58;
+    // Place the Stamina bar well above the bear's head/snout (64px above center)
+    const by = this.bearY - 64;
 
     const onCrackingFloe =
       this.isOnIce && this.currentFloe && !this.currentFloe.isSanctuary;
@@ -1551,7 +1539,7 @@ export class PolarBearScene extends Phaser.Scene {
       );
     }
 
-    // 2. Ice Fracture Countdown Bar + Tag (with clear vertical separation)
+    // 2. Ice Fracture Countdown Bar + Tag stacked ABOVE the Stamina bar
     if (onCrackingFloe && this.currentFloe) {
       const secsLeft = Math.max(
         0,
@@ -1563,9 +1551,9 @@ export class PolarBearScene extends Phaser.Scene {
         1
       );
 
-      // Separate pill 7px below the Stamina bar
-      const iceBarY = by + barH + 7;
+      // Separate pill stacked 14px above the Stamina bar so nothing crowds the bear
       const iceBarH = 5;
+      const iceBarY = by - 14;
       this.bearUiGraphics.fillStyle(0x040d17, 0.9);
       this.bearUiGraphics.fillRoundedRect(
         bx - 2,
@@ -1587,8 +1575,8 @@ export class PolarBearScene extends Phaser.Scene {
         2
       );
 
-      // Float the countdown text 8px above the top of the Stamina bar
-      this.bearUiTagText.setPosition(this.bearX, by - 8);
+      // Float the countdown text 8px above the Ice Fracture bar
+      this.bearUiTagText.setPosition(this.bearX, iceBarY - 8);
       this.bearUiTagText.setColor(secsLeft < 1.5 ? '#f87171' : '#fbbf24');
       this.bearUiTagText.setText(`${secsLeft.toFixed(1)}s`);
     } else {
