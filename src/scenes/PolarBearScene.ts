@@ -1,10 +1,13 @@
 import Phaser from 'phaser';
 import {
   formatDuration,
-  formatHudClock,
   recordLevelCompletion,
 } from '../utils/LeaderboardStore';
 import { ShippingCorridorManager } from '../systems/ShippingCorridorManager';
+import {
+  EpisodeUIManager,
+  getStaminaSpeedMultiplier,
+} from '../systems/EpisodeUIManager';
 
 interface IceFloe {
   id: number;
@@ -111,18 +114,8 @@ export class PolarBearScene extends Phaser.Scene {
     SHIFT: Phaser.Input.Keyboard.Key;
   };
 
-  // HUD Elements (fixed to camera) + World-Space Bear Overlay
-  private viewportOceanBg!: Phaser.GameObjects.Graphics;
-  private hudGraphics!: Phaser.GameObjects.Graphics;
-  private hudLevelLabel!: Phaser.GameObjects.Text;
-  private hudHeroDistanceText!: Phaser.GameObjects.Text;
-  private hudSubDistanceText!: Phaser.GameObjects.Text;
-  private hudHintText!: Phaser.GameObjects.Text;
-  private exhaustionVignette!: Phaser.GameObjects.Graphics;
-
-  // World-space UI directly over the Polar Bear
-  private bearUiGraphics!: Phaser.GameObjects.Graphics;
-  private bearUiTagText!: Phaser.GameObjects.Text;
+  // Shared Episode UI Manager (Fixed HUD + World-Space Bear Overlay + Vignette)
+  private uiManager!: EpisodeUIManager;
 
   constructor() {
     super({ key: 'PolarBearScene' });
@@ -223,11 +216,20 @@ export class PolarBearScene extends Phaser.Scene {
       };
     }
 
-    // 8. Build Fixed HUD
-    this.createHUD();
+    // 8. Build Shared Episode HUD & World-Space Bars
+    this.uiManager = new EpisodeUIManager(this, {
+      accentColor: 0x38bdf8,
+      accentHex: '#38bdf8',
+      bottomHint:
+        'WASD / Arrows: Move   •   SPACE: Lunge   •   Eat seals to restore Max Stamina & Speed',
+      autoFadeHintMs: 5500,
+      worldUiYOffset: 64,
+      worldBarWidth: 72,
+    });
+    this.uiManager.redrawViewportBg(0x040d17);
 
     if (this.level > 1) {
-      this.spawnFloatingText(
+      this.uiManager.spawnFloatingNotice(
         this.bearX,
         this.bearY - 30,
         `LEVEL ${this.level} — ${this.levelTargetMeters}m TO NEXT SANCTUARY`,
@@ -237,7 +239,7 @@ export class PolarBearScene extends Phaser.Scene {
 
     // Handle window resize cleanly
     this.scale.on('resize', () => {
-      this.layoutHUD();
+      this.uiManager.handleResize(0x040d17);
     });
   }
 
@@ -272,13 +274,6 @@ export class PolarBearScene extends Phaser.Scene {
   }
 
   private drawOceanBackdrop(): void {
-    // Full-viewport fixed ocean fill so wide screens never show a vertical seam on the right
-    this.viewportOceanBg = this.add
-      .graphics()
-      .setScrollFactor(0)
-      .setDepth(-2);
-    this.redrawViewportOcean();
-
     const bg = this.add.graphics().setDepth(0);
     // Deep Arctic bathyal gradient across world
     bg.fillGradientStyle(0x071e34, 0x071e34, 0x030b14, 0x030b14, 1);
@@ -295,19 +290,6 @@ export class PolarBearScene extends Phaser.Scene {
       }
       bg.strokePath();
     }
-  }
-
-  private redrawViewportOcean(): void {
-    if (!this.viewportOceanBg) return;
-    this.viewportOceanBg.clear();
-    this.viewportOceanBg.fillGradientStyle(
-      0x071e34,
-      0x071e34,
-      0x030b14,
-      0x030b14,
-      1
-    );
-    this.viewportOceanBg.fillRect(0, 0, this.scale.width, this.scale.height);
   }
 
   private canPlaceFloe(x: number, y: number, radius: number): boolean {
@@ -588,7 +570,7 @@ export class PolarBearScene extends Phaser.Scene {
     const cx = floe.container.x;
     const cy = floe.container.y;
     this.spawnSplashRing(cx, cy, 1.5);
-    this.spawnFloatingText(cx, cy, 'ICE BROKE APART!', '#f87171');
+    this.uiManager.spawnFloatingNotice(cx, cy, 'ICE BROKE APART!', '#f87171');
 
     // Spawn 5 breaking ice chunks that drift outward and sink
     const shardCount = 5;
@@ -684,90 +666,6 @@ export class PolarBearScene extends Phaser.Scene {
       wakeDepth: 13,
       shipDepth: 14,
     });
-  }
-
-  private createHUD(): void {
-    this.exhaustionVignette = this.add
-      .graphics()
-      .setScrollFactor(0)
-      .setDepth(95);
-
-    // 1. Minimalist Top-Left Progress Card with clear visual hierarchy
-    this.hudGraphics = this.add.graphics().setScrollFactor(0).setDepth(100);
-
-    this.hudLevelLabel = this.add
-      .text(28, 22, '', {
-        fontSize: '11px',
-        fontStyle: 'bold',
-        color: '#38bdf8',
-      })
-      .setScrollFactor(0)
-      .setDepth(101);
-
-    this.hudHeroDistanceText = this.add
-      .text(28, 40, '', {
-        fontSize: '26px',
-        fontStyle: 'bold',
-        color: '#ffffff',
-      })
-      .setScrollFactor(0)
-      .setDepth(101);
-
-    this.hudSubDistanceText = this.add
-      .text(0, 49, 'to Sanctuary', {
-        fontSize: '12px',
-        color: '#94a3b8',
-      })
-      .setScrollFactor(0)
-      .setDepth(101);
-
-    // 2. World-Space UI directly over the Bear (Stamina + Ice Break Timer)
-    this.bearUiGraphics = this.add.graphics().setDepth(45);
-    this.bearUiTagText = this.add
-      .text(0, 0, '', {
-        fontSize: '11px',
-        fontStyle: 'bold',
-        color: '#fbbf24',
-        stroke: '#041019',
-        strokeThickness: 3,
-      })
-      .setOrigin(0.5, 1)
-      .setDepth(46);
-
-    // 3. Auto-fading bottom controls hint
-    this.hudHintText = this.add
-      .text(
-        0,
-        0,
-        'WASD / Arrows: Move   •   SPACE: Lunge   •   Eat seals to restore Max Stamina & Speed',
-        {
-          fontSize: '12px',
-          color: '#cbd5e1',
-          backgroundColor: 'rgba(6, 16, 26, 0.78)',
-          padding: { x: 14, y: 7 },
-        }
-      )
-      .setOrigin(0.5, 1)
-      .setScrollFactor(0)
-      .setDepth(101);
-
-    this.time.delayedCall(5500, () => {
-      if (this.hudHintText && this.hudHintText.active) {
-        this.tweens.add({
-          targets: this.hudHintText,
-          alpha: 0,
-          duration: 1200,
-        });
-      }
-    });
-
-    this.layoutHUD();
-  }
-
-  private layoutHUD(): void {
-    const { width, height } = this.scale;
-    this.redrawViewportOcean();
-    this.hudHintText.setPosition(width / 2, height - 16);
   }
 
   update(_time: number, deltaMs: number): void {
@@ -1001,10 +899,9 @@ export class PolarBearScene extends Phaser.Scene {
     }
 
     // Lower Max Stamina directly slows down movement & lunge speed (1.0x at 100% down to 0.52x at 20%)
-    const maxStaminaSpeedFactor = Phaser.Math.Linear(
-      0.52,
-      1.0,
-      Phaser.Math.Clamp((this.maxStamina - 20) / 80, 0, 1)
+    const maxStaminaSpeedFactor = getStaminaSpeedMultiplier(
+      this.maxStamina,
+      0.52
     );
 
     if (this.lungeTimer > 0) {
@@ -1115,7 +1012,7 @@ export class PolarBearScene extends Phaser.Scene {
         // Eating a seal restores your Maximum Stamina ceiling!
         this.maxStamina = Math.min(100, this.maxStamina + 30);
         this.stamina = Math.min(this.maxStamina, this.stamina + 45);
-        this.spawnFloatingText(
+        this.uiManager.spawnFloatingNotice(
           seal.sprite.x,
           seal.sprite.y,
           '+30% MAX STAMINA!',
@@ -1141,7 +1038,7 @@ export class PolarBearScene extends Phaser.Scene {
         if (seal.alertLevel >= 100) {
           seal.state = 'spooked';
           this.spawnSplashRing(seal.sprite.x, seal.sprite.y, 1.0);
-          this.spawnFloatingText(
+          this.uiManager.spawnFloatingNotice(
             seal.sprite.x,
             seal.sprite.y,
             'Seal dove away!',
@@ -1177,7 +1074,7 @@ export class PolarBearScene extends Phaser.Scene {
       this.gameEnded = true;
       this.cameras.main.shake(320, 0.014);
       this.spawnSplashRing(this.bearX, this.bearY, 1.8);
-      this.spawnFloatingText(
+      this.uiManager.spawnFloatingNotice(
         this.bearX,
         this.bearY,
         'STRUCK BY ARCTIC VESSEL!',
@@ -1202,32 +1099,6 @@ export class PolarBearScene extends Phaser.Scene {
       alpha: 0,
       duration: 650,
       onComplete: () => ring.destroy(),
-    });
-  }
-
-  private spawnFloatingText(
-    x: number,
-    y: number,
-    msg: string,
-    color: string
-  ): void {
-    const txt = this.add
-      .text(x, y - 16, msg, {
-        fontSize: '13px',
-        fontStyle: 'bold',
-        color,
-        stroke: '#041019',
-        strokeThickness: 4,
-      })
-      .setOrigin(0.5)
-      .setDepth(50);
-
-    this.tweens.add({
-      targets: txt,
-      y: y - 54,
-      alpha: 0,
-      duration: 1200,
-      onComplete: () => txt.destroy(),
     });
   }
 
@@ -1275,7 +1146,7 @@ export class PolarBearScene extends Phaser.Scene {
         const pbSuffix = res.isNewBest
           ? ` (NEW BEST ${formatDuration(this.levelElapsedSeconds)}!)`
           : ` (${formatDuration(this.levelElapsedSeconds)})`;
-        this.spawnFloatingText(
+        this.uiManager.spawnFloatingNotice(
           this.bearX,
           this.bearY - 24,
           `★ LEVEL ${this.level} COMPLETE${pbSuffix} → LEVEL ${nextLevel} (${nextMeters}m)`,
@@ -1360,9 +1231,6 @@ export class PolarBearScene extends Phaser.Scene {
   }
 
   private renderHUD(): void {
-    const { width, height } = this.scale;
-    this.hudGraphics.clear();
-
     const metersRemaining = Math.max(
       0,
       Math.round(
@@ -1376,103 +1244,26 @@ export class PolarBearScene extends Phaser.Scene {
       1
     );
 
-    // 1. Minimalist Top-Left Migration Card (Clear Visual Hierarchy + Live Timer)
-    this.hudLevelLabel.setText(
-      `LEVEL ${this.level}  •  ⏱ ${formatHudClock(this.levelElapsedSeconds)}`
-    );
-    this.hudHeroDistanceText.setText(`${metersRemaining}m`);
-    this.hudSubDistanceText.setPosition(
-      this.hudHeroDistanceText.x + this.hudHeroDistanceText.width + 8,
-      49
-    );
-
-    const distanceRowRight =
-      this.hudSubDistanceText.x + this.hudSubDistanceText.width;
-    const levelRowRight = this.hudLevelLabel.x + this.hudLevelLabel.width;
-    const cardW = Math.max(216, distanceRowRight - 16 + 20, levelRowRight - 16 + 20);
-    const cardH = 84;
-
-    this.hudGraphics.fillStyle(0x06121e, 0.86);
-    this.hudGraphics.fillRoundedRect(16, 12, cardW, cardH, 10);
-    this.hudGraphics.lineStyle(1, 0x38bdf8, 0.25);
-    this.hudGraphics.strokeRoundedRect(16, 12, cardW, cardH, 10);
-
-    // Slim northward progress bar inside top-left card
-    const progX = 28;
-    const progY = 78;
-    const progW = cardW - 24;
-    this.hudGraphics.fillStyle(0x0f172a, 0.95);
-    this.hudGraphics.fillRoundedRect(progX, progY, progW, 6, 3);
-    if (progressPct > 0.01) {
-      this.hudGraphics.fillStyle(0x38bdf8, 0.95);
-      this.hudGraphics.fillRoundedRect(
-        progX,
-        progY,
-        Math.max(4, progW * progressPct),
-        6,
-        3
-      );
-    }
-
-    // 2. World-Space UI Directly Over the Bear (Stamina + Max Cap + Ice Fracture Timer)
-    this.renderBearWorldUI();
-
-    // 3. Low-stamina danger vignette
-    this.exhaustionVignette.clear();
-    if (this.stamina < 35) {
-      const dangerAlpha = ((35 - this.stamina) / 35) * 0.45;
-      this.exhaustionVignette.lineStyle(24, 0xef4444, dangerAlpha);
-      this.exhaustionVignette.strokeRect(0, 0, width, height);
-    }
-  }
-
-  private renderBearWorldUI(): void {
-    this.bearUiGraphics.clear();
-
-    const barW = 72;
-    const barH = 9;
-    const bx = this.bearX - barW / 2;
-    // Place the Stamina bar well above the bear's head/snout (64px above center)
-    const by = this.bearY - 64;
+    this.uiManager.renderTopHUD({
+      headerPrefix: `EPISODE 01 • LEVEL ${this.level}`,
+      elapsedSeconds: this.levelElapsedSeconds,
+      heroValueText: `${metersRemaining}m`,
+      subValueText: 'to Sanctuary',
+      progressPct,
+      stamina: this.stamina,
+    });
 
     const onCrackingFloe =
       this.isOnIce && this.currentFloe && !this.currentFloe.isSanctuary;
+    let secondaryBar:
+      | {
+          pct: number;
+          fillColor: number;
+          tagText: string;
+          tagColor: string;
+        }
+      | undefined;
 
-    // 1. Stamina Bar backdrop pill
-    this.bearUiGraphics.fillStyle(0x040d17, 0.9);
-    this.bearUiGraphics.fillRoundedRect(bx - 2, by - 2, barW + 4, barH + 4, 4);
-
-    // Locked / Depleted Max Stamina Ceiling (dark crimson right side + tick mark)
-    const clampedMax = Phaser.Math.Clamp(this.maxStamina / 100, 0.2, 1);
-    if (clampedMax < 0.995) {
-      const capX = bx + barW * clampedMax;
-      const lostW = bx + barW - capX;
-      this.bearUiGraphics.fillStyle(0x7f1d1d, 0.9);
-      this.bearUiGraphics.fillRect(capX, by, lostW, barH);
-      this.bearUiGraphics.lineStyle(1.5, 0xf87171, 0.95);
-      this.bearUiGraphics.lineBetween(capX, by, capX, by + barH);
-    }
-
-    // Current Stamina Fill
-    const staminaPct = Phaser.Math.Clamp(this.stamina / 100, 0, clampedMax);
-    if (staminaPct > 0) {
-      const fillCol =
-        this.stamina < 28
-          ? 0xef4444
-          : this.isOnIce
-          ? 0x34d399
-          : 0x38bdf8;
-      this.bearUiGraphics.fillStyle(fillCol, 0.96);
-      this.bearUiGraphics.fillRoundedRect(
-        bx,
-        by,
-        Math.max(3, barW * staminaPct),
-        barH,
-        2
-      );
-    }
-
-    // 2. Ice Fracture Countdown Bar + Tag stacked ABOVE the Stamina bar
     if (onCrackingFloe && this.currentFloe) {
       const secsLeft = Math.max(
         0,
@@ -1483,37 +1274,28 @@ export class PolarBearScene extends Phaser.Scene {
         0,
         1
       );
-
-      // Separate pill stacked 14px above the Stamina bar so nothing crowds the bear
-      const iceBarH = 5;
-      const iceBarY = by - 14;
-      this.bearUiGraphics.fillStyle(0x040d17, 0.9);
-      this.bearUiGraphics.fillRoundedRect(
-        bx - 2,
-        iceBarY - 1,
-        barW + 4,
-        iceBarH + 2,
-        3
-      );
-
-      this.bearUiGraphics.fillStyle(
-        secsLeft < 1.5 ? 0xef4444 : 0xf59e0b,
-        0.95
-      );
-      this.bearUiGraphics.fillRoundedRect(
-        bx,
-        iceBarY,
-        Math.max(2, barW * lifePct),
-        iceBarH,
-        2
-      );
-
-      // Float the countdown text 8px above the Ice Fracture bar
-      this.bearUiTagText.setPosition(this.bearX, iceBarY - 8);
-      this.bearUiTagText.setColor(secsLeft < 1.5 ? '#f87171' : '#fbbf24');
-      this.bearUiTagText.setText(`${secsLeft.toFixed(1)}s`);
-    } else {
-      this.bearUiTagText.setText('');
+      secondaryBar = {
+        pct: lifePct,
+        fillColor: secsLeft < 1.5 ? 0xef4444 : 0xf59e0b,
+        tagText: `${secsLeft.toFixed(1)}s`,
+        tagColor: secsLeft < 1.5 ? '#f87171' : '#fbbf24',
+      };
     }
+
+    const fillCol =
+      this.stamina < 28
+        ? 0xef4444
+        : this.isOnIce
+        ? 0x34d399
+        : 0x38bdf8;
+
+    this.uiManager.renderWorldBars({
+      x: this.bearX,
+      y: this.bearY,
+      stamina: this.stamina,
+      maxStamina: this.maxStamina,
+      primaryFillColor: fillCol,
+      secondaryBar,
+    });
   }
 }

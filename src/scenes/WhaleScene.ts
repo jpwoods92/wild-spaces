@@ -1,10 +1,13 @@
 import Phaser from 'phaser';
 import {
   formatDuration,
-  formatHudClock,
   recordLevelCompletion,
 } from '../utils/LeaderboardStore';
 import { ShippingCorridorManager } from '../systems/ShippingCorridorManager';
+import {
+  EpisodeUIManager,
+  getStaminaSpeedMultiplier,
+} from '../systems/EpisodeUIManager';
 
 interface CopepodBloom {
   x: number;
@@ -123,22 +126,12 @@ export class WhaleScene extends Phaser.Scene {
   private acousticWaves: AcousticWave[] = [];
   private calfSprite!: Phaser.GameObjects.Image;
 
-  // Visual layers
-  private viewportOceanBg!: Phaser.GameObjects.Graphics;
+  // Visual layers & Shared Episode UI Manager
   private oceanCurrentGraphics!: Phaser.GameObjects.Graphics;
   private acousticGraphics!: Phaser.GameObjects.Graphics;
   private entangledRopeGraphics!: Phaser.GameObjects.Graphics;
   private darknessOverlayGraphics!: Phaser.GameObjects.Graphics;
-  private bearUiGraphics!: Phaser.GameObjects.Graphics;
-  private bearUiTagText!: Phaser.GameObjects.Text;
-
-  // HUD
-  private hudGraphics!: Phaser.GameObjects.Graphics;
-  private hudLevelLabel!: Phaser.GameObjects.Text;
-  private hudDistanceText!: Phaser.GameObjects.Text;
-  private hudSubDistanceText!: Phaser.GameObjects.Text;
-  private hudPromptText!: Phaser.GameObjects.Text;
-  private exhaustionVignette!: Phaser.GameObjects.Graphics;
+  private uiManager!: EpisodeUIManager;
 
   // Input
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -238,24 +231,11 @@ export class WhaleScene extends Phaser.Scene {
     // 6. Acoustic Masking / Deep Darkness Vignette Overlay
     this.darknessOverlayGraphics = this.add.graphics().setDepth(25);
 
-    // 7. World-Space UI directly above the Whale
-    this.bearUiGraphics = this.add.graphics().setDepth(32);
-    this.bearUiTagText = this.add
-      .text(this.whaleX, this.whaleY - 92, '', {
-        fontSize: '11px',
-        fontStyle: 'bold',
-        color: '#38bdf8',
-        backgroundColor: 'rgba(4, 13, 23, 0.85)',
-        padding: { x: 6, y: 2 },
-      })
-      .setOrigin(0.5, 1)
-      .setDepth(33);
-
-    // 8. Camera Setup (centered on whale for 360-degree navigation)
+    // 7. Camera Setup (centered on whale for 360-degree navigation)
     this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
     this.cameras.main.startFollow(this.whale, true, 0.09, 0.09, 0, 0);
 
-    // 9. Controls
+    // 8. Controls
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.wasd = this.input.keyboard!.addKeys('W,A,S,D,SPACE') as {
       W: Phaser.Input.Keyboard.Key;
@@ -265,13 +245,23 @@ export class WhaleScene extends Phaser.Scene {
       SPACE: Phaser.Input.Keyboard.Key;
     };
 
-    // 10. Top-Left HUD
-    this.createHUD();
+    // 9. Shared Episode HUD & World-Space Bars
+    this.uiManager = new EpisodeUIManager(this, {
+      accentColor: 0x818cf8,
+      accentHex: '#818cf8',
+      bottomHint:
+        'WASD / Arrows: Swim  •  SPACE: Sing (Echolocation Call to Reveal Food, Nets & Calf Bearing)',
+      worldUiYOffset: 84,
+      worldBarWidth: 78,
+    });
+    this.uiManager.redrawViewportBg(0x030b17);
 
     // Emit an initial welcome sonar pulse so the player immediately sees the first bearing echo
     this.emitWhaleCall(true);
 
-    this.scale.on('resize', this.handleResize, this);
+    this.scale.on('resize', () => {
+      this.uiManager.handleResize(0x030b17);
+    });
   }
 
   private resetState(): void {
@@ -355,12 +345,6 @@ export class WhaleScene extends Phaser.Scene {
   }
 
   private createOceanBackdrop(): void {
-    this.viewportOceanBg = this.add
-      .graphics()
-      .setScrollFactor(0)
-      .setDepth(-20);
-    this.drawViewportOceanBg();
-
     const bg = this.add.graphics().setDepth(0);
     bg.fillGradientStyle(0x020813, 0x020813, 0x07192e, 0x051324, 1);
     bg.fillRect(0, 0, this.worldWidth, this.worldHeight);
@@ -374,18 +358,6 @@ export class WhaleScene extends Phaser.Scene {
     for (let x = 200; x < this.worldWidth; x += 260) {
       this.oceanCurrentGraphics.lineBetween(x, 0, x, this.worldHeight);
     }
-  }
-
-  private drawViewportOceanBg(): void {
-    if (!this.viewportOceanBg) return;
-    this.viewportOceanBg.clear();
-    this.viewportOceanBg.fillStyle(0x030b17, 1);
-    this.viewportOceanBg.fillRect(
-      0,
-      0,
-      this.scale.width + 200,
-      this.scale.height + 200
-    );
   }
 
   private spawnSanctuary(): void {
@@ -621,72 +593,6 @@ export class WhaleScene extends Phaser.Scene {
     });
   }
 
-  private createHUD(): void {
-    this.exhaustionVignette = this.add
-      .graphics()
-      .setScrollFactor(0)
-      .setDepth(35);
-
-    this.hudGraphics = this.add.graphics().setScrollFactor(0).setDepth(40);
-
-    const levelHeader =
-      this.level > 1
-        ? `EPISODE 02 • LEVEL ${this.level}`
-        : 'EPISODE 02 • DROWNED ECHOES';
-
-    this.hudLevelLabel = this.add
-      .text(28, 22, levelHeader, {
-        fontSize: '11px',
-        fontStyle: 'bold',
-        color: '#818cf8',
-        letterSpacing: 1.5,
-      })
-      .setScrollFactor(0)
-      .setDepth(41);
-
-    this.hudDistanceText = this.add
-      .text(28, 40, '0m', {
-        fontSize: '28px',
-        fontStyle: 'bold',
-        color: '#f8fafc',
-      })
-      .setScrollFactor(0)
-      .setDepth(41);
-
-    this.hudSubDistanceText = this.add
-      .text(102, 49, `/ ${this.migrationDistanceMeters}m (0%)`, {
-        fontSize: '13px',
-        fontStyle: 'bold',
-        color: '#94a3b8',
-      })
-      .setScrollFactor(0)
-      .setDepth(41);
-
-    this.hudPromptText = this.add
-      .text(
-        this.scale.width / 2,
-        this.scale.height - 34,
-        'WASD / Arrows: Swim  •  SPACE: Sing (Echolocation Call to Reveal Food, Nets & Calf Bearing)',
-        {
-          fontSize: '13px',
-          fontStyle: 'bold',
-          color: '#e2e8f0',
-          backgroundColor: 'rgba(6, 16, 26, 0.85)',
-          padding: { x: 14, y: 8 },
-        }
-      )
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(41);
-  }
-
-  private handleResize(gameSize: Phaser.Structs.Size): void {
-    if (this.hudPromptText) {
-      this.hudPromptText.setPosition(gameSize.width / 2, gameSize.height - 34);
-    }
-    this.drawViewportOceanBg();
-  }
-
   private emitWhaleCall(isInitialFreeCall = false): void {
     if (!isInitialFreeCall) {
       // Singing/thrashing when entangled helps loosen 1 rope stack even if voice is recovering
@@ -695,7 +601,7 @@ export class WhaleScene extends Phaser.Scene {
         if (this.entangleStruggleProgress >= 1) {
           this.entangledStacks = Math.max(0, this.entangledStacks - 1);
           this.entangleStruggleProgress = 0;
-          this.showFloatingNotice(
+          this.uiManager.spawnFloatingNotice(
             this.whaleX,
             this.whaleY - 40,
             'SHED ENTANGLED LINE!',
@@ -705,7 +611,7 @@ export class WhaleScene extends Phaser.Scene {
       }
 
       if (this.callCooldownTimer > 0) {
-        this.showFloatingNotice(
+        this.uiManager.spawnFloatingNotice(
           this.whaleX,
           this.whaleY - 44,
           this.noiseMaskingTimer > 0
@@ -829,7 +735,7 @@ export class WhaleScene extends Phaser.Scene {
       }
 
       if (!isInitialFreeCall) {
-        this.showFloatingNotice(
+        this.uiManager.spawnFloatingNotice(
           this.whaleX,
           this.whaleY + 52,
           `DECOY ECHOES ACTIVE (>${this.DECOY_CLEAR_DISTANCE_METERS}m FROM CALF)`,
@@ -837,32 +743,6 @@ export class WhaleScene extends Phaser.Scene {
         );
       }
     }
-  }
-
-  private showFloatingNotice(
-    x: number,
-    y: number,
-    message: string,
-    color: string
-  ): void {
-    const notice = this.add
-      .text(x, y, message, {
-        fontSize: '12px',
-        fontStyle: 'bold',
-        color,
-        backgroundColor: 'rgba(4, 13, 23, 0.88)',
-        padding: { x: 7, y: 3 },
-      })
-      .setOrigin(0.5)
-      .setDepth(34);
-
-    this.tweens.add({
-      targets: notice,
-      y: y - 34,
-      alpha: 0,
-      duration: 1200,
-      onComplete: () => notice.destroy(),
-    });
   }
 
   update(_time: number, delta: number): void {
@@ -1161,12 +1041,10 @@ export class WhaleScene extends Phaser.Scene {
     }
 
     // Speed scales with maxStamina and is penalized by entangled fishing gear
-    const maxStaminaNormalized = Phaser.Math.Clamp(
-      (this.maxStamina - 20) / 80,
-      0,
-      1
+    const staminaSpeedFactor = getStaminaSpeedMultiplier(
+      this.maxStamina,
+      0.54
     );
-    const staminaSpeedFactor = 0.54 + 0.46 * maxStaminaNormalized;
     const entanglementFactor = Math.max(
       0.42,
       1 - this.entangledStacks * 0.2
@@ -1227,7 +1105,7 @@ export class WhaleScene extends Phaser.Scene {
       this.currentMetersToCalf <= this.DECOY_CLEAR_DISTANCE_METERS
     ) {
       this.announcedDecoyLock = true;
-      this.showFloatingNotice(
+      this.uiManager.spawnFloatingNotice(
         this.whaleX,
         this.whaleY - 46,
         'WITHIN 420m — DECOY ECHOES CLEARED!',
@@ -1270,14 +1148,14 @@ export class WhaleScene extends Phaser.Scene {
         if (this.entangledStacks > 0) {
           this.entangledStacks = Math.max(0, this.entangledStacks - 1);
           this.entangleStruggleProgress = 0;
-          this.showFloatingNotice(
+          this.uiManager.spawnFloatingNotice(
             bloom.x,
             bloom.y - 24,
             '+STAMINA & SHED FISHING LINE!',
             '#34d399'
           );
         } else {
-          this.showFloatingNotice(
+          this.uiManager.spawnFloatingNotice(
             bloom.x,
             bloom.y - 24,
             '+STAMINA & +MAX STAMINA',
@@ -1313,7 +1191,7 @@ export class WhaleScene extends Phaser.Scene {
         this.stamina = Math.max(0, this.stamina - 10);
         this.cameras.main.shake(220, 0.01);
 
-        this.showFloatingNotice(
+        this.uiManager.spawnFloatingNotice(
           this.whaleX,
           this.whaleY - 40,
           'ENTANGLED IN FISHING GEAR! (TAP SPACE OR FEED TO BREAK FREE)',
@@ -1410,200 +1288,86 @@ export class WhaleScene extends Phaser.Scene {
   }
 
   private renderHUD(): void {
-    const { width, height } = this.scale;
-    const pct = Math.min(
-      100,
-      Math.round(
-        (this.maxNorthMetersInLevel / this.migrationDistanceMeters) * 100
-      )
+    const progressPct = Phaser.Math.Clamp(
+      this.maxNorthMetersInLevel / this.migrationDistanceMeters,
+      0,
+      1
     );
 
-    const levelHeader =
-      this.level > 1
-        ? `EPISODE 02 • LEVEL ${this.level}  •  ⏱ ${formatHudClock(
-            this.levelElapsedSeconds
-          )}`
-        : `EPISODE 02  •  ⏱ ${formatHudClock(this.levelElapsedSeconds)}`;
-    this.hudLevelLabel.setText(levelHeader);
+    const headerPrefix =
+      this.level > 1 ? `EPISODE 02 • LEVEL ${this.level}` : 'EPISODE 02';
 
-    this.hudDistanceText.setText(`${this.maxNorthMetersInLevel}m`);
-    this.hudSubDistanceText.setPosition(
-      this.hudDistanceText.x + this.hudDistanceText.width + 8,
-      49
-    );
-    this.hudSubDistanceText.setText(
-      `/ ${this.migrationDistanceMeters}m (${this.currentMetersToCalf}m to calf)`
-    );
-
-    const cardX = 16;
-    const cardY = 12;
-    const rightEdge = Math.max(
-      this.hudLevelLabel.x + this.hudLevelLabel.width,
-      this.hudSubDistanceText.x + this.hudSubDistanceText.width
-    );
-    const cardW = Math.max(230, rightEdge - cardX + 20);
-    const cardH = 74;
-
-    this.hudGraphics.clear();
-    this.hudGraphics.fillStyle(0x061322, 0.86);
-    this.hudGraphics.fillRoundedRect(cardX, cardY, cardW, cardH, 10);
-    this.hudGraphics.lineStyle(1, 0x818cf8, 0.3);
-    this.hudGraphics.strokeRoundedRect(cardX, cardY, cardW, cardH, 10);
-
-    // Progress bar inside card
-    const progW = cardW - 24;
-    this.hudGraphics.fillStyle(0x0f172a, 0.95);
-    this.hudGraphics.fillRoundedRect(cardX + 12, cardY + 60, progW, 5, 2);
-    this.hudGraphics.fillStyle(0x818cf8, 1);
-    this.hudGraphics.fillRoundedRect(
-      cardX + 12,
-      cardY + 60,
-      Math.max(4, (progW * pct) / 100),
-      5,
-      2
-    );
-
-    // Exhaustion or Acoustic Masking screen-edge vignette
-    this.exhaustionVignette.clear();
-    if (this.stamina < 35) {
-      const dangerAlpha = ((35 - this.stamina) / 35) * 0.45;
-      this.exhaustionVignette.lineStyle(24, 0xef4444, dangerAlpha);
-      this.exhaustionVignette.strokeRect(0, 0, width, height);
-    } else if (this.noiseMaskingTimer > 0) {
-      const noiseAlpha = Math.min(0.35, this.noiseMaskingTimer * 0.16);
-      this.exhaustionVignette.lineStyle(18, 0xf59e0b, noiseAlpha);
-      this.exhaustionVignette.strokeRect(0, 0, width, height);
-    }
+    this.uiManager.renderTopHUD({
+      headerPrefix,
+      elapsedSeconds: this.levelElapsedSeconds,
+      heroValueText: `${this.maxNorthMetersInLevel}m`,
+      subValueText: `/ ${this.migrationDistanceMeters}m (${this.currentMetersToCalf}m to calf)`,
+      progressPct,
+      stamina: this.stamina,
+      secondaryVignetteColor: 0xf59e0b,
+      secondaryVignetteAlpha:
+        this.noiseMaskingTimer > 0
+          ? Math.min(0.35, this.noiseMaskingTimer * 0.16)
+          : 0,
+    });
   }
 
   private renderWhaleWorldUI(): void {
-    this.bearUiGraphics.clear();
+    const fillCol =
+      this.stamina < 28
+        ? 0xef4444
+        : this.entangledStacks > 0
+        ? 0xf97316
+        : 0x38bdf8;
 
-    const barW = 78;
-    const barH = 9;
-    const bx = this.whaleX - barW / 2;
-    // Place the Stamina bar well above the longer whale's rostrum (84px above center)
-    const by = this.whaleY - 84;
-
-    // 1. Stamina Bar backdrop pill
-    this.bearUiGraphics.fillStyle(0x040d17, 0.9);
-    this.bearUiGraphics.fillRoundedRect(bx - 2, by - 2, barW + 4, barH + 4, 4);
-
-    // Locked / Depleted Max Stamina Ceiling
-    const clampedMax = Phaser.Math.Clamp(this.maxStamina / 100, 0.2, 1);
-    if (clampedMax < 0.995) {
-      const capX = bx + barW * clampedMax;
-      const lostW = bx + barW - capX;
-      this.bearUiGraphics.fillStyle(0x7f1d1d, 0.9);
-      this.bearUiGraphics.fillRect(capX, by, lostW, barH);
-      this.bearUiGraphics.lineStyle(1.5, 0xf87171, 0.95);
-      this.bearUiGraphics.lineBetween(capX, by, capX, by + barH);
-    }
-
-    // Current Stamina Fill
-    const staminaPct = Phaser.Math.Clamp(this.stamina / 100, 0, clampedMax);
-    if (staminaPct > 0) {
-      const fillCol =
-        this.stamina < 28
-          ? 0xef4444
-          : this.entangledStacks > 0
-          ? 0xf97316
-          : 0x38bdf8;
-      this.bearUiGraphics.fillStyle(fillCol, 0.96);
-      this.bearUiGraphics.fillRoundedRect(
-        bx,
-        by,
-        Math.max(3, barW * staminaPct),
-        barH,
-        2
-      );
-    }
-
-    // 2. Secondary Status Bar + Tag stacked ABOVE the Stamina bar
-    const topBarY = by - 14;
-    const topBarH = 5;
+    let secondaryBar:
+      | {
+          pct: number;
+          fillColor: number;
+          tagText: string;
+          tagColor: string;
+        }
+      | undefined;
 
     if (this.entangledStacks > 0) {
-      // Show Entanglement warning & break-free progress bar above Stamina bar
-      this.bearUiGraphics.fillStyle(0x040d17, 0.9);
-      this.bearUiGraphics.fillRoundedRect(
-        bx - 2,
-        topBarY - 1,
-        barW + 4,
-        topBarH + 2,
-        3
-      );
-      this.bearUiGraphics.fillStyle(0xf97316, 0.95);
-      this.bearUiGraphics.fillRoundedRect(
-        bx,
-        topBarY,
-        Math.max(6, barW * (this.entangledStacks / 3)),
-        topBarH,
-        2
-      );
-
-      this.bearUiTagText.setPosition(this.whaleX, topBarY - 8);
-      this.bearUiTagText.setColor('#fb923c');
-      this.bearUiTagText.setText(
-        `ENTANGLED ×${this.entangledStacks} (SPACE / FEED)`
-      );
+      secondaryBar = {
+        pct: this.entangledStacks / 3,
+        fillColor: 0xf97316,
+        tagText: `ENTANGLED ×${this.entangledStacks} (SPACE / FEED)`,
+        tagColor: '#fb923c',
+      };
     } else if (this.callCooldownTimer > 0) {
-      // Show Sonar Cooldown bar (amber/longer when disrupted by noise, indigo/cyan normally)
       const isDisrupted = this.noiseMaskingTimer > 0;
       const cooldownPct = Phaser.Math.Clamp(
         this.callCooldownTimer / Math.max(0.1, this.callCooldownMax),
         0,
         1
       );
-      this.bearUiGraphics.fillStyle(0x040d17, 0.9);
-      this.bearUiGraphics.fillRoundedRect(
-        bx - 2,
-        topBarY - 1,
-        barW + 4,
-        topBarH + 2,
-        3
-      );
-      this.bearUiGraphics.fillStyle(isDisrupted ? 0xf59e0b : 0x818cf8, 0.95);
-      this.bearUiGraphics.fillRoundedRect(
-        bx,
-        topBarY,
-        Math.max(3, barW * cooldownPct),
-        topBarH,
-        2
-      );
-
-      this.bearUiTagText.setPosition(this.whaleX, topBarY - 8);
-      this.bearUiTagText.setColor(isDisrupted ? '#fbbf24' : '#a5b4fc');
-      this.bearUiTagText.setText(
-        isDisrupted
+      secondaryBar = {
+        pct: cooldownPct,
+        fillColor: isDisrupted ? 0xf59e0b : 0x818cf8,
+        tagText: isDisrupted
           ? `SONAR DISRUPTED • ${this.callCooldownTimer.toFixed(1)}s`
-          : `SONAR COOLDOWN • ${this.callCooldownTimer.toFixed(1)}s`
-      );
+          : `SONAR COOLDOWN • ${this.callCooldownTimer.toFixed(1)}s`,
+        tagColor: isDisrupted ? '#fbbf24' : '#a5b4fc',
+      };
     } else if (this.noiseMaskingTimer > 0) {
-      const maskPct = Phaser.Math.Clamp(this.noiseMaskingTimer / 2.2, 0, 1);
-      this.bearUiGraphics.fillStyle(0x040d17, 0.9);
-      this.bearUiGraphics.fillRoundedRect(
-        bx - 2,
-        topBarY - 1,
-        barW + 4,
-        topBarH + 2,
-        3
-      );
-      this.bearUiGraphics.fillStyle(0xf59e0b, 0.95);
-      this.bearUiGraphics.fillRoundedRect(
-        bx,
-        topBarY,
-        Math.max(4, barW * maskPct),
-        topBarH,
-        2
-      );
-
-      this.bearUiTagText.setPosition(this.whaleX, topBarY - 8);
-      this.bearUiTagText.setColor('#fbbf24');
-      this.bearUiTagText.setText('NOISE MASKING SONAR');
-    } else {
-      this.bearUiTagText.setText('');
+      secondaryBar = {
+        pct: Phaser.Math.Clamp(this.noiseMaskingTimer / 2.2, 0, 1),
+        fillColor: 0xf59e0b,
+        tagText: 'NOISE MASKING SONAR',
+        tagColor: '#fbbf24',
+      };
     }
+
+    this.uiManager.renderWorldBars({
+      x: this.whaleX,
+      y: this.whaleY,
+      stamina: this.stamina,
+      maxStamina: this.maxStamina,
+      primaryFillColor: fillCol,
+      secondaryBar,
+    });
   }
 
   private triggerEndState(
@@ -1662,7 +1426,7 @@ export class WhaleScene extends Phaser.Scene {
       const pbSuffix = res.isNewBest
         ? ` (NEW BEST ${formatDuration(this.levelElapsedSeconds)}!)`
         : ` (${formatDuration(this.levelElapsedSeconds)})`;
-      this.showFloatingNotice(
+      this.uiManager.spawnFloatingNotice(
         this.whaleX,
         this.whaleY - 40,
         `★ LEVEL ${this.level} COMPLETE${pbSuffix}`,

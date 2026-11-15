@@ -154,9 +154,31 @@ function renderImpactLeaderboard(params: {
     .join('');
 }
 
-// Expose impact modal hook for Episode 1 (PolarBearScene)
-winState.showPolarBearImpactModal = (payload) => {
-  activeEpisodeKey = 'PolarBearScene';
+interface EpisodeImpactModalDescriptor {
+  episodeId: 'PolarBearScene' | 'WhaleScene';
+  episodeLabel: string;
+  level: number;
+  won: boolean;
+  tagText: string;
+  titleText: string;
+  summaryText: string;
+  nextButtonLabel?: string;
+  nextLevelData: PolarBearSceneData | WhaleSceneData | null;
+  totalMetersMigrated: number;
+  stat2Value: string;
+  stat2Label: string;
+  stat3Value: string;
+  stat3Label: string;
+  levelTimeSeconds: number;
+  totalTimeSeconds: number;
+  factHeading: string;
+  factBody: string;
+}
+
+function openEpisodeImpactModal(desc: EpisodeImpactModalDescriptor): void {
+  activeEpisodeKey = desc.episodeId;
+  pendingNextLevelData = desc.won ? desc.nextLevelData : null;
+
   const tag = document.getElementById('impact-tag')!;
   const title = document.getElementById('impact-title')!;
   const summary = document.getElementById('impact-summary')!;
@@ -171,131 +193,125 @@ winState.showPolarBearImpactModal = (payload) => {
   const factHeading = document.getElementById('impact-fact-heading')!;
   const factBody = document.getElementById('impact-fact')!;
 
-  pendingNextLevelData = payload.won ? payload.nextLevelData : null;
+  tag.className = desc.won ? 'modal-tag success' : 'modal-tag danger';
+  tag.textContent = desc.tagText;
+  title.textContent = desc.titleText;
+  summary.textContent = desc.summaryText;
 
-  if (payload.won) {
-    tag.className = 'modal-tag success';
-    tag.textContent = `Episode 1 • Level ${payload.level} Complete`;
-    title.textContent = 'You Reached the Northern Pack Ice';
-    summary.textContent = `You navigated ${payload.levelTargetMeters}m north in ${formatDuration(
-      payload.levelTimeSeconds
-    )} and reunited with your cub (${payload.floesCollapsed} ice patches shattered along the way). Continue north into Level ${
-      payload.level + 1
-    } (${payload.nextLevelMeters}m) where ice patches and seals grow even scarcer!`;
+  if (desc.won && desc.nextButtonLabel) {
     btnNextLevel.style.display = 'inline-flex';
-    btnNextLevel.textContent = `Continue North (Level ${payload.level + 1} • ${payload.nextLevelMeters}m →)`;
-  } else if (payload.deathReason === 'ship') {
-    tag.className = 'modal-tag danger';
-    tag.textContent = `Vessel Strike • Level ${payload.level}`;
-    title.textContent = 'Struck by an Industrial Arctic Vessel';
-    summary.textContent = `As melting sea ice opens new commercial shipping corridors across the Arctic, vessel traffic has surged—creating lethal open-water crossings for migrating wildlife (${payload.totalMetersMigrated}m total progress).`;
-    btnNextLevel.style.display = 'none';
+    btnNextLevel.textContent = desc.nextButtonLabel;
   } else {
-    tag.className = 'modal-tag danger';
-    tag.textContent = `Stranded on Level ${payload.level}`;
-    title.textContent = 'Exhausted by Shrinking Ice';
-    summary.textContent = `You reached Level ${payload.level} (${payload.metersInLevel}m / ${payload.levelTargetMeters}m in this level, ${payload.totalMetersMigrated}m total) before your stamina gave out in open water.`;
     btnNextLevel.style.display = 'none';
   }
 
-  statDist.textContent = `${payload.totalMetersMigrated}m`;
-  statDistLabel.textContent = `Total Distance (Lvl ${payload.level})`;
-  statSwum.textContent = `${payload.swimMeters}m`;
-  statSwumLabel.textContent = 'Open-Water Swim';
-  statSeals.textContent = `${payload.sealsCaught}`;
-  statSealsLabel.textContent = 'Seals Caught';
-  statTime.textContent = formatDuration(payload.levelTimeSeconds);
-  statTimeLabel.textContent = payload.won
-    ? `Level ${payload.level} Time`
+  statDist.textContent = `${desc.totalMetersMigrated}m`;
+  statDistLabel.textContent = `Total Distance (Lvl ${desc.level})`;
+  statSwum.textContent = desc.stat2Value;
+  statSwumLabel.textContent = desc.stat2Label;
+  statSeals.textContent = desc.stat3Value;
+  statSealsLabel.textContent = desc.stat3Label;
+  statTime.textContent = formatDuration(desc.levelTimeSeconds);
+  statTimeLabel.textContent = desc.won
+    ? `Level ${desc.level} Time`
     : 'Time Survived';
 
   renderImpactLeaderboard({
+    episodeId: desc.episodeId,
+    episodeLabel: desc.episodeLabel,
+    level: desc.level,
+    won: desc.won,
+    levelTimeSeconds: desc.levelTimeSeconds,
+    totalTimeSeconds: desc.totalTimeSeconds,
+    totalMeters: desc.totalMetersMigrated,
+  });
+
+  factHeading.textContent = desc.factHeading;
+  factBody.textContent = desc.factBody;
+
+  impactModal.classList.add('active');
+}
+
+// Expose impact modal hook for Episode 1 (PolarBearScene)
+winState.showPolarBearImpactModal = (payload) => {
+  openEpisodeImpactModal({
     episodeId: 'PolarBearScene',
     episodeLabel: 'Polar Bear',
     level: payload.level,
     won: payload.won,
+    tagText: payload.won
+      ? `Episode 1 • Level ${payload.level} Complete`
+      : payload.deathReason === 'ship'
+      ? `Vessel Strike • Level ${payload.level}`
+      : `Stranded on Level ${payload.level}`,
+    titleText: payload.won
+      ? 'You Reached the Northern Pack Ice'
+      : payload.deathReason === 'ship'
+      ? 'Struck by an Industrial Arctic Vessel'
+      : 'Exhausted by Shrinking Ice',
+    summaryText: payload.won
+      ? `You navigated ${payload.levelTargetMeters}m north in ${formatDuration(
+          payload.levelTimeSeconds
+        )} and reunited with your cub (${payload.floesCollapsed} ice patches shattered along the way). Continue north into Level ${
+          payload.level + 1
+        } (${payload.nextLevelMeters}m) where ice patches and seals grow even scarcer!`
+      : payload.deathReason === 'ship'
+      ? `As melting sea ice opens new commercial shipping corridors across the Arctic, vessel traffic has surged—creating lethal open-water crossings for migrating wildlife (${payload.totalMetersMigrated}m total progress).`
+      : `You reached Level ${payload.level} (${payload.metersInLevel}m / ${payload.levelTargetMeters}m in this level, ${payload.totalMetersMigrated}m total) before your stamina gave out in open water.`,
+    nextButtonLabel: `Continue North (Level ${payload.level + 1} • ${payload.nextLevelMeters}m →)`,
+    nextLevelData: payload.nextLevelData,
+    totalMetersMigrated: payload.totalMetersMigrated,
+    stat2Value: `${payload.swimMeters}m`,
+    stat2Label: 'Open-Water Swim',
+    stat3Value: `${payload.sealsCaught}`,
+    stat3Label: 'Seals Caught',
     levelTimeSeconds: payload.levelTimeSeconds,
     totalTimeSeconds: payload.totalTimeSeconds,
-    totalMeters: payload.totalMetersMigrated,
+    factHeading: 'Real-World Arctic Crisis',
+    factBody:
+      'Arctic sea ice is shrinking by nearly 13% per decade. As seasonal ice breaks up weeks earlier each spring, polar bears are forced to swim up to 3x farther across freezing open water—burning critical fat reserves needed to nurse their cubs.',
   });
-
-  factHeading.textContent = 'Real-World Arctic Crisis';
-  factBody.textContent =
-    'Arctic sea ice is shrinking by nearly 13% per decade. As seasonal ice breaks up weeks earlier each spring, polar bears are forced to swim up to 3x farther across freezing open water—burning critical fat reserves needed to nurse their cubs.';
-
-  impactModal.classList.add('active');
 };
 
 // Expose impact modal hook for Episode 2 (WhaleScene)
 winState.showWhaleImpactModal = (payload) => {
-  activeEpisodeKey = 'WhaleScene';
-  const tag = document.getElementById('impact-tag')!;
-  const title = document.getElementById('impact-title')!;
-  const summary = document.getElementById('impact-summary')!;
-  const statDist = document.getElementById('stat-distance')!;
-  const statDistLabel = document.getElementById('stat-distance-label')!;
-  const statSwum = document.getElementById('stat-swum')!;
-  const statSwumLabel = document.getElementById('stat-swum-label')!;
-  const statSeals = document.getElementById('stat-seals')!;
-  const statSealsLabel = document.getElementById('stat-seals-label')!;
-  const statTime = document.getElementById('stat-time')!;
-  const statTimeLabel = document.getElementById('stat-time-label')!;
-  const factHeading = document.getElementById('impact-fact-heading')!;
-  const factBody = document.getElementById('impact-fact')!;
-
-  pendingNextLevelData = payload.won ? payload.nextLevelData : null;
-
-  if (payload.won) {
-    tag.className = 'modal-tag success';
-    tag.textContent = `Episode 2 • Level ${payload.level} Complete`;
-    title.textContent = 'Reunited in the Calving Sanctuary';
-    summary.textContent = `Following your calf’s answering echoes through dark Atlantic waters, you navigated ${payload.levelTargetMeters}m in ${formatDuration(
-      payload.levelTimeSeconds
-    )} to the sanctuary. Continue into Level ${
-      payload.level + 1
-    } (${payload.nextLevelMeters}m) where plankton blooms grow scarcer and decoy echoes emerge!`;
-    btnNextLevel.style.display = 'inline-flex';
-    btnNextLevel.textContent = `Continue Migration (Level ${payload.level + 1} • ${payload.nextLevelMeters}m →)`;
-  } else if (payload.deathReason === 'ship') {
-    tag.className = 'modal-tag danger';
-    tag.textContent = `Vessel Strike • Level ${payload.level}`;
-    title.textContent = 'Struck in a High-Speed Shipping Lane';
-    summary.textContent = `Low-frequency engine noise masks the approach of commercial vessels until it is too late. Ship strikes and rope entanglements are the two leading causes of death for North Atlantic Right Whales (${payload.totalMetersMigrated}m total progress).`;
-    btnNextLevel.style.display = 'none';
-  } else {
-    tag.className = 'modal-tag danger';
-    tag.textContent = `Exhausted on Level ${payload.level}`;
-    title.textContent = 'Stamina Depleted by Noise & Entanglement';
-    summary.textContent = `You migrated ${payload.metersInLevel}m / ${payload.levelTargetMeters}m on Level ${payload.level} (${payload.totalMetersMigrated}m total) before chronic acoustic stress and fishing gear drag exhausted your reserves.`;
-    btnNextLevel.style.display = 'none';
-  }
-
-  statDist.textContent = `${payload.totalMetersMigrated}m`;
-  statDistLabel.textContent = `Total Distance (Lvl ${payload.level})`;
-  statSwum.textContent = `${payload.bloomsConsumed}`;
-  statSwumLabel.textContent = 'Plankton Blooms Fed';
-  statSeals.textContent = `${payload.entanglementsHit}`;
-  statSealsLabel.textContent = 'Gear Entanglements';
-  statTime.textContent = formatDuration(payload.levelTimeSeconds);
-  statTimeLabel.textContent = payload.won
-    ? `Level ${payload.level} Time`
-    : 'Time Survived';
-
-  renderImpactLeaderboard({
+  openEpisodeImpactModal({
     episodeId: 'WhaleScene',
     episodeLabel: 'Right Whale',
     level: payload.level,
     won: payload.won,
+    tagText: payload.won
+      ? `Episode 2 • Level ${payload.level} Complete`
+      : payload.deathReason === 'ship'
+      ? `Vessel Strike • Level ${payload.level}`
+      : `Exhausted on Level ${payload.level}`,
+    titleText: payload.won
+      ? 'Reunited in the Calving Sanctuary'
+      : payload.deathReason === 'ship'
+      ? 'Struck in a High-Speed Shipping Lane'
+      : 'Stamina Depleted by Noise & Entanglement',
+    summaryText: payload.won
+      ? `Following your calf’s answering echoes through dark Atlantic waters, you navigated ${payload.levelTargetMeters}m in ${formatDuration(
+          payload.levelTimeSeconds
+        )} to the sanctuary. Continue into Level ${
+          payload.level + 1
+        } (${payload.nextLevelMeters}m) where plankton blooms grow scarcer and decoy echoes emerge!`
+      : payload.deathReason === 'ship'
+      ? `Low-frequency engine noise masks the approach of commercial vessels until it is too late. Ship strikes and rope entanglements are the two leading causes of death for North Atlantic Right Whales (${payload.totalMetersMigrated}m total progress).`
+      : `You migrated ${payload.metersInLevel}m / ${payload.levelTargetMeters}m on Level ${payload.level} (${payload.totalMetersMigrated}m total) before chronic acoustic stress and fishing gear drag exhausted your reserves.`,
+    nextButtonLabel: `Continue Migration (Level ${payload.level + 1} • ${payload.nextLevelMeters}m →)`,
+    nextLevelData: payload.nextLevelData,
+    totalMetersMigrated: payload.totalMetersMigrated,
+    stat2Value: `${payload.bloomsConsumed}`,
+    stat2Label: 'Plankton Blooms Fed',
+    stat3Value: `${payload.entanglementsHit}`,
+    stat3Label: 'Gear Entanglements',
     levelTimeSeconds: payload.levelTimeSeconds,
     totalTimeSeconds: payload.totalTimeSeconds,
-    totalMeters: payload.totalMetersMigrated,
+    factHeading: 'North Atlantic Right Whale Crisis (<360 Left)',
+    factBody:
+      'Fewer than 360 North Atlantic Right Whales remain on Earth. Over 85% have been entangled in commercial fishing gear at least once, and underwater shipping noise drowns out up to 90% of the acoustic communication space mothers and calves rely on to stay together.',
   });
-
-  factHeading.textContent = 'North Atlantic Right Whale Crisis (<360 Left)';
-  factBody.textContent =
-    'Fewer than 360 North Atlantic Right Whales remain on Earth. Over 85% have been entangled in commercial fishing gear at least once, and underwater shipping noise drowns out up to 90% of the acoustic communication space mothers and calves rely on to stay together.';
-
-  impactModal.classList.add('active');
 };
 
 // Impact modal buttons
