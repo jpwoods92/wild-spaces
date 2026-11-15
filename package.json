@@ -1,0 +1,19 @@
+{
+  "name": "wild-spaces",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Top-down wildlife conservation anthology game raising awareness and funds for shrinking habitats",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "phaser": "^3.87.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}
