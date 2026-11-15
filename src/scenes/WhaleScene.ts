@@ -275,16 +275,40 @@ export class WhaleScene extends Phaser.Scene {
     bloomSpacingY: number;
     ghostNetChance: number;
     seismicBuoyCount: number;
+    shipNoiseInterval: number;
+    shipNoiseRadius: number;
+    buoyNoiseRadius: number;
+    maskingDuration: number;
+    maskedCallRadius: number;
+    maskedDecayMultiplier: number;
   } {
     const lvlOffset = this.level - 1;
     // Blooms become sparser (from every 310px down to a floor of every 520px)
     const bloomSpacingY = Math.min(520, 310 + lvlOffset * 42);
     // Ghost net density increases up to a cap
-    const ghostNetChance = Math.min(0.88, 0.55 + lvlOffset * 0.07);
-    // Seismic survey buoys increase from 3 up to 7
-    const seismicBuoyCount = Math.min(7, 3 + lvlOffset);
+    const ghostNetChance = Math.min(0.88, 0.5 + lvlOffset * 0.08);
+    // Seismic survey buoys start at just 1 on Level 1 and scale up to 6
+    const seismicBuoyCount = Math.min(6, 1 + lvlOffset);
 
-    return { bloomSpacingY, ghostNetChance, seismicBuoyCount };
+    // Acoustic noise intensity scales up gradually across levels instead of hitting hard on Level 1
+    const shipNoiseInterval = Math.max(1.75, 3.2 - lvlOffset * 0.32);
+    const shipNoiseRadius = Math.min(350, 210 + lvlOffset * 32);
+    const buoyNoiseRadius = Math.min(420, 260 + lvlOffset * 35);
+    const maskingDuration = Math.min(2.2, 1.0 + lvlOffset * 0.28);
+    const maskedCallRadius = Math.max(420, 590 - lvlOffset * 38);
+    const maskedDecayMultiplier = Math.min(2.0, 1.25 + lvlOffset * 0.18);
+
+    return {
+      bloomSpacingY,
+      ghostNetChance,
+      seismicBuoyCount,
+      shipNoiseInterval,
+      shipNoiseRadius,
+      buoyNoiseRadius,
+      maskingDuration,
+      maskedCallRadius,
+      maskedDecayMultiplier,
+    };
   }
 
   private createOceanBackdrop(): void {
@@ -367,8 +391,9 @@ export class WhaleScene extends Phaser.Scene {
     const { bloomSpacingY, ghostNetChance, seismicBuoyCount } =
       this.getDifficultyProfile();
 
-    // Guaranteed starting copepod bloom just ahead of spawn so player sees foraging right away
-    this.createCopepodBloom(centerX + 90, this.startY - 260, true);
+    // Guaranteed starting copepod bloom & nearby ghost net just ahead of spawn (both disguised until sonar sweeps them)
+    this.createCopepodBloom(centerX + 90, this.startY - 260);
+    this.createGhostNet(centerX - 135, this.startY - 310);
 
     // Shipping corridor centers to keep clear of static buoys
     const corridorCenters = this.getCorridorCenters();
@@ -381,7 +406,7 @@ export class WhaleScene extends Phaser.Scene {
       if (!isInsideCorridor(yCursor)) {
         // 1-2 Copepod Blooms in this band
         const bloomX = centerX + Phaser.Math.Between(-440, 440);
-        this.createCopepodBloom(bloomX, yCursor, false);
+        this.createCopepodBloom(bloomX, yCursor);
 
         if (Math.random() < 0.38) {
           const secondX =
@@ -389,9 +414,8 @@ export class WhaleScene extends Phaser.Scene {
               ? centerX - Phaser.Math.Between(180, 460)
               : centerX + Phaser.Math.Between(180, 460);
           this.createCopepodBloom(
-             secondX,
-            yCursor + Phaser.Math.Between(-70, 70),
-            false
+            secondX,
+            yCursor + Phaser.Math.Between(-70, 70)
           );
         }
 
@@ -424,8 +448,8 @@ export class WhaleScene extends Phaser.Scene {
       }
       const buoyX =
         i % 2 === 0
-          ? centerX - Phaser.Math.Between(140, 360)
-          : centerX + Phaser.Math.Between(140, 360);
+          ? centerX - Phaser.Math.Between(180, 380)
+          : centerX + Phaser.Math.Between(180, 380);
 
       const sprite = this.add
         .image(buoyX, buoyY, 'seismic_buoy')
@@ -435,21 +459,18 @@ export class WhaleScene extends Phaser.Scene {
         x: buoyX,
         y: buoyY,
         pulseTimer: Phaser.Math.FloatBetween(0, 2.2),
-        pulseInterval: Math.max(2.1, 3.1 - (this.level - 1) * 0.15),
+        pulseInterval: Math.max(2.2, 4.2 - (this.level - 1) * 0.35),
         sprite,
       });
     }
   }
 
-  private createCopepodBloom(
-    x: number,
-    y: number,
-    initiallyRevealed: boolean
-  ): void {
+  private createCopepodBloom(x: number, y: number): void {
+    // Disguised as 'sonar_mystery' until pinged by sonar
     const sprite = this.add
-      .image(x, y, 'copepod_bloom')
+      .image(x, y, 'sonar_mystery')
       .setDepth(10)
-      .setAlpha(initiallyRevealed ? 0.95 : 0.08);
+      .setAlpha(0.18);
     const sonarRing = this.add.graphics().setDepth(11);
 
     this.blooms.push({
@@ -459,7 +480,7 @@ export class WhaleScene extends Phaser.Scene {
       vx: Phaser.Math.FloatBetween(-12, 12),
       vy: Phaser.Math.FloatBetween(-4, 4),
       consumed: false,
-      revealTimer: initiallyRevealed ? 6.0 : 0,
+      revealTimer: 0,
       pulsePhase: Phaser.Math.FloatBetween(0, Math.PI * 2),
       sprite,
       sonarRing,
@@ -467,18 +488,18 @@ export class WhaleScene extends Phaser.Scene {
   }
 
   private createGhostNet(x: number, y: number): void {
+    // Identical 'sonar_mystery' silhouette until pinged by sonar
     const sprite = this.add
-      .image(x, y, 'ghost_net')
-      .setDepth(12)
-      .setAlpha(0.07)
-      .setRotation(Phaser.Math.FloatBetween(-0.25, 0.25));
+      .image(x, y, 'sonar_mystery')
+      .setDepth(10)
+      .setAlpha(0.18);
     const sonarRing = this.add.graphics().setDepth(13);
 
     this.ghostNets.push({
       x,
       y,
       radius: 34,
-      vx: Phaser.Math.FloatBetween(-16, 16),
+      vx: Phaser.Math.FloatBetween(-12, 12),
       snagged: false,
       revealTimer: 0,
       sprite,
@@ -488,6 +509,10 @@ export class WhaleScene extends Phaser.Scene {
 
   private getCorridorCenters(): number[] {
     const totalSpan = this.startY - this.goalY;
+    // Level 1 has a single shipping corridor; Level 2+ introduces a second corridor
+    if (this.level === 1) {
+      return [this.goalY + totalSpan * 0.45];
+    }
     return [this.goalY + totalSpan * 0.62, this.goalY + totalSpan * 0.3];
   }
 
@@ -539,18 +564,20 @@ export class WhaleScene extends Phaser.Scene {
         .setAlpha(0.85)
         .setDepth(3);
 
-      const speedBoost = Math.min(36, (this.level - 1) * 8);
+      // Level 1 starts gentler (1 ship per lane, slower speed) and scales up on Level 2+
+      const speedBoost = Math.min(48, (this.level - 1) * 12);
+      const shipsPerLane = this.level === 1 ? 1 : 2;
       const lanes = [
         {
           y: centerCorridorY - 60,
-          vx: 170 + speedBoost,
-          shipsInLane: 2,
+          vx: 145 + speedBoost,
+          shipsInLane: shipsPerLane,
           phaseOffset: 0,
         },
         {
           y: centerCorridorY + 60,
-          vx: -(190 + speedBoost),
-          shipsInLane: 2,
+          vx: -(160 + speedBoost),
+          shipsInLane: shipsPerLane,
           phaseOffset: 440,
         },
       ];
@@ -673,8 +700,10 @@ export class WhaleScene extends Phaser.Scene {
       }
     }
 
-    // If heavily masked by vessel noise, call range is reduced
-    const maxCallRadius = this.noiseMaskingTimer > 0 ? 410 : 760;
+    // If masked by vessel noise, call range is reduced according to current level scaling
+    const { maskedCallRadius } = this.getDifficultyProfile();
+    const maxCallRadius =
+      this.noiseMaskingTimer > 0 ? maskedCallRadius : 760;
 
     this.acousticWaves.push({
       x: this.whaleX,
@@ -791,7 +820,25 @@ export class WhaleScene extends Phaser.Scene {
   }
 
   private updateEntities(dt: number): void {
-    const ambientSightRadius = this.noiseMaskingTimer > 0 ? 95 : 165;
+    const ambientSightRadius = this.noiseMaskingTimer > 0 ? 115 : 195;
+    const {
+      shipNoiseInterval,
+      shipNoiseRadius,
+      buoyNoiseRadius,
+      maskedDecayMultiplier,
+    } = this.getDifficultyProfile();
+
+    // Helper for murky unrevealed alpha so food and traps look 100% identical without sonar
+    const getUnrevealedMysteryAlpha = (distToWhale: number): number => {
+      if (distToWhale < ambientSightRadius) {
+        return Phaser.Math.Clamp(
+          0.16 + (1 - distToWhale / ambientSightRadius) * 0.42,
+          0.16,
+          0.58
+        );
+      }
+      return 0.14;
+    };
 
     // Copepod blooms
     for (const bloom of this.blooms) {
@@ -802,7 +849,8 @@ export class WhaleScene extends Phaser.Scene {
       if (bloom.revealTimer > 0) {
         bloom.revealTimer = Math.max(
           0,
-          bloom.revealTimer - (this.noiseMaskingTimer > 0 ? dt * 2.1 : dt)
+          bloom.revealTimer -
+            (this.noiseMaskingTimer > 0 ? dt * maskedDecayMultiplier : dt)
         );
       }
 
@@ -812,27 +860,35 @@ export class WhaleScene extends Phaser.Scene {
         bloom.x,
         bloom.y
       );
-      const proximityAlpha =
-        distToWhale < ambientSightRadius
-          ? Phaser.Math.Clamp(1 - distToWhale / ambientSightRadius, 0.15, 0.95)
-          : 0.08;
-      const sonarAlpha =
-        bloom.revealTimer > 0
-          ? Phaser.Math.Clamp(bloom.revealTimer / 1.8, 0.2, 1)
-          : 0;
 
       bloom.sprite.setPosition(bloom.x, bloom.y);
-      bloom.sprite.setAlpha(Math.max(proximityAlpha, sonarAlpha));
-
       bloom.sonarRing.clear();
+
       if (bloom.revealTimer > 0) {
-        const ringAlpha = Phaser.Math.Clamp(bloom.revealTimer / 3.5, 0.15, 0.75);
+        // Revealed by Sonar -> show true Copepod Bloom sprite + pink sonar ring
+        if (bloom.sprite.texture.key !== 'copepod_bloom') {
+          bloom.sprite.setTexture('copepod_bloom');
+        }
+        const sonarAlpha = Phaser.Math.Clamp(bloom.revealTimer / 1.6, 0.35, 1);
+        bloom.sprite.setAlpha(sonarAlpha);
+
+        const ringAlpha = Phaser.Math.Clamp(
+          bloom.revealTimer / 3.5,
+          0.2,
+          0.8
+        );
         bloom.sonarRing.lineStyle(2, 0xf472b6, ringAlpha);
         bloom.sonarRing.strokeCircle(
           bloom.x,
           bloom.y,
           bloom.radius + Math.sin(bloom.pulsePhase) * 4
         );
+      } else {
+        // Unrevealed -> disguised as murky silhouette, completely indistinguishable from a Ghost Net
+        if (bloom.sprite.texture.key !== 'sonar_mystery') {
+          bloom.sprite.setTexture('sonar_mystery');
+        }
+        bloom.sprite.setAlpha(getUnrevealedMysteryAlpha(distToWhale));
       }
     }
 
@@ -843,7 +899,8 @@ export class WhaleScene extends Phaser.Scene {
       if (net.revealTimer > 0) {
         net.revealTimer = Math.max(
           0,
-          net.revealTimer - (this.noiseMaskingTimer > 0 ? dt * 2.2 : dt)
+          net.revealTimer -
+            (this.noiseMaskingTimer > 0 ? dt * maskedDecayMultiplier : dt)
         );
       }
 
@@ -853,23 +910,27 @@ export class WhaleScene extends Phaser.Scene {
         net.x,
         net.y
       );
-      const proximityAlpha =
-        distToWhale < ambientSightRadius
-          ? Phaser.Math.Clamp(1 - distToWhale / ambientSightRadius, 0.12, 0.92)
-          : 0.06;
-      const sonarAlpha =
-        net.revealTimer > 0
-          ? Phaser.Math.Clamp(net.revealTimer / 1.8, 0.2, 0.95)
-          : 0;
 
       net.sprite.setPosition(net.x, net.y);
-      net.sprite.setAlpha(Math.max(proximityAlpha, sonarAlpha));
-
       net.sonarRing.clear();
+
       if (net.revealTimer > 0) {
-        const ringAlpha = Phaser.Math.Clamp(net.revealTimer / 3.5, 0.2, 0.85);
+        // Revealed by Sonar -> show true Ghost Net sprite + orange hazard sonar ring
+        if (net.sprite.texture.key !== 'ghost_net') {
+          net.sprite.setTexture('ghost_net');
+        }
+        const sonarAlpha = Phaser.Math.Clamp(net.revealTimer / 1.6, 0.35, 0.98);
+        net.sprite.setAlpha(sonarAlpha);
+
+        const ringAlpha = Phaser.Math.Clamp(net.revealTimer / 3.5, 0.25, 0.85);
         net.sonarRing.lineStyle(2, 0xf97316, ringAlpha);
         net.sonarRing.strokeCircle(net.x, net.y, net.radius + 4);
+      } else {
+        // Unrevealed -> disguised as murky silhouette, completely indistinguishable from a Copepod Bloom
+        if (net.sprite.texture.key !== 'sonar_mystery') {
+          net.sprite.setTexture('sonar_mystery');
+        }
+        net.sprite.setAlpha(getUnrevealedMysteryAlpha(distToWhale));
       }
     }
 
@@ -882,8 +943,8 @@ export class WhaleScene extends Phaser.Scene {
           x: buoy.x,
           y: buoy.y,
           radius: 18,
-          maxRadius: 430,
-          speed: 310,
+          maxRadius: buoyNoiseRadius,
+          speed: 280,
           kind: 'noise_pulse',
           color: 0xef4444,
         });
@@ -900,16 +961,16 @@ export class WhaleScene extends Phaser.Scene {
       }
       ship.sprite.setPosition(ship.x, ship.y);
 
-      // Periodic propeller acoustic noise rings from moving ships
+      // Periodic propeller acoustic noise rings from moving ships (gentler on Level 1, scales up with level)
       ship.noiseTimer += dt;
-      if (ship.noiseTimer >= 1.65) {
+      if (ship.noiseTimer >= shipNoiseInterval) {
         ship.noiseTimer = 0;
         this.acousticWaves.push({
           x: ship.x,
           y: ship.y,
-          radius: 28,
-          maxRadius: 360,
-          speed: 280,
+          radius: 24,
+          maxRadius: shipNoiseRadius,
+          speed: 255,
           kind: 'noise_pulse',
           color: 0xf59e0b,
         });
@@ -988,9 +1049,13 @@ export class WhaleScene extends Phaser.Scene {
           this.whaleY
         );
         if (Math.abs(distToWhale - wave.radius) < 22) {
-          this.noiseMaskingTimer = Math.max(this.noiseMaskingTimer, 2.2);
+          const { maskingDuration } = this.getDifficultyProfile();
+          this.noiseMaskingTimer = Math.max(
+            this.noiseMaskingTimer,
+            maskingDuration
+          );
           // Chronic noise stress erodes max stamina slightly
-          this.maxStamina = Math.max(20, this.maxStamina - 4.5 * dt);
+          this.maxStamina = Math.max(20, this.maxStamina - 3.2 * dt);
           this.stamina = Math.min(this.stamina, this.maxStamina);
         }
       }

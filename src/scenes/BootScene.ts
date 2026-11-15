@@ -411,5 +411,23 @@ export class BootScene extends Phaser.Scene {
       g.generateTexture('seismic_buoy', 48, 48);
       g.destroy();
     }
+
+    // 6. Ambiguous Unidentified Deep-Water Silhouette (shared by both Food & Traps until pinged by Sonar)
+    if (!this.textures.exists('sonar_mystery')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      // Outer murky shadow cloud
+      g.fillStyle(0x1e293b, 0.55);
+      g.fillCircle(34, 34, 28);
+      g.fillStyle(0x334155, 0.65);
+      g.fillEllipse(34, 34, 42, 34);
+      // Faint ambiguous inner core
+      g.fillStyle(0x475569, 0.5);
+      g.fillCircle(32, 33, 11);
+      // Subtle dashed unknown ring
+      g.lineStyle(1.5, 0x64748b, 0.45);
+      g.strokeCircle(34, 34, 24);
+      g.generateTexture('sonar_mystery', 68, 68);
+      g.destroy();
+    }
   }
 }
