@@ -8,6 +8,7 @@ import {
   EpisodeUIManager,
   getStaminaSpeedMultiplier,
 } from '../systems/EpisodeUIManager';
+import { globalPauseManager } from '../systems/PauseManager';
 
 interface IceFloe {
   id: number;
@@ -221,12 +222,13 @@ export class PolarBearScene extends Phaser.Scene {
       accentColor: 0x38bdf8,
       accentHex: '#38bdf8',
       bottomHint:
-        'WASD / Arrows: Move   •   SPACE: Lunge   •   Eat seals to restore Max Stamina & Speed',
+        'WASD / Arrows: Move   •   SPACE: Lunge   •   Eat seals to restore Max Stamina   •   P / ESC: Pause',
       autoFadeHintMs: 5500,
       worldUiYOffset: 64,
       worldBarWidth: 72,
     });
     this.uiManager.redrawViewportBg(0x040d17);
+    globalPauseManager.attachScene(this);
 
     if (this.level > 1) {
       this.uiManager.spawnFloatingNotice(
@@ -669,7 +671,7 @@ export class PolarBearScene extends Phaser.Scene {
   }
 
   update(_time: number, deltaMs: number): void {
-    if (this.gameEnded) return;
+    if (this.gameEnded || globalPauseManager.isPaused()) return;
 
     const dt = Math.min(deltaMs / 1000, 0.05);
     this.levelElapsedSeconds += dt;
@@ -1072,6 +1074,7 @@ export class PolarBearScene extends Phaser.Scene {
 
     if (struck) {
       this.gameEnded = true;
+      globalPauseManager.setGameEnded(true);
       this.cameras.main.shake(320, 0.014);
       this.spawnSplashRing(this.bearX, this.bearY, 1.8);
       this.uiManager.spawnFloatingNotice(
@@ -1120,6 +1123,7 @@ export class PolarBearScene extends Phaser.Scene {
     // Win: Reached the Northern Sanctuary near the Cub
     if (this.bearY <= this.SANCTUARY_Y + 75 && this.isOnIce) {
       this.gameEnded = true;
+      globalPauseManager.setGameEnded(true);
 
       const isInfiniteMode = Boolean(
         (window as unknown as { wildSpacesInfiniteMode?: boolean })
@@ -1165,6 +1169,7 @@ export class PolarBearScene extends Phaser.Scene {
     // Loss: Exhaustion / Drowning (Stamina hit 0)
     if (this.stamina <= 0) {
       this.gameEnded = true;
+      globalPauseManager.setGameEnded(true);
       this.triggerImpactOverlay(false);
     }
   }

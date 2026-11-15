@@ -14,6 +14,7 @@ import {
   LeaderboardEntry,
   recordLevelCompletion,
 } from './utils/LeaderboardStore';
+import { globalPauseManager } from './systems/PauseManager';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -72,8 +73,74 @@ winState.wildSpacesInfiniteMode = false;
 // Wire up HTML UI & Conservation Modals
 const impactModal = document.getElementById('impact-modal')!;
 const infoModal = document.getElementById('info-modal')!;
+const pauseModal = document.getElementById('pause-modal')!;
+const btnPauseToggle = document.getElementById('btn-pause-toggle')!;
 const btnInfiniteToggle = document.getElementById('btn-infinite-toggle')!;
 const btnNextLevel = document.getElementById('btn-impact-next-level')!;
+
+function openInfoModal(): void {
+  infoModal.classList.add('active');
+  globalPauseManager.setModalOpen(true);
+}
+
+function closeInfoModal(): void {
+  infoModal.classList.remove('active');
+  globalPauseManager.setModalOpen(false);
+}
+
+globalPauseManager.subscribe((state) => {
+  if (!state.hasActiveScene) {
+    btnPauseToggle.style.display = 'none';
+    pauseModal.classList.remove('active');
+    return;
+  }
+
+  btnPauseToggle.style.display = 'inline-flex';
+  if (state.isPaused) {
+    btnPauseToggle.textContent = '▶ Resume';
+    btnPauseToggle.classList.add('btn-pause-active');
+  } else {
+    btnPauseToggle.textContent = '⏸ Pause';
+    btnPauseToggle.classList.remove('btn-pause-active');
+  }
+
+  // Show manual pause overlay when manually paused and no other modal is covering the screen
+  if (state.manualPaused && !state.modalPaused) {
+    pauseModal.classList.add('active');
+  } else {
+    pauseModal.classList.remove('active');
+  }
+});
+
+btnPauseToggle.addEventListener('click', () => {
+  if (infoModal.classList.contains('active')) {
+    closeInfoModal();
+    globalPauseManager.setManualPause(false);
+    return;
+  }
+  globalPauseManager.toggleManualPause();
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+  const key = e.key.toLowerCase();
+
+  if (key === 'escape') {
+    if (infoModal.classList.contains('active')) {
+      closeInfoModal();
+      return;
+    }
+    if (!impactModal.classList.contains('active')) {
+      globalPauseManager.toggleManualPause();
+    }
+  } else if (
+    key === 'p' &&
+    !infoModal.classList.contains('active') &&
+    !impactModal.classList.contains('active')
+  ) {
+    globalPauseManager.toggleManualPause();
+  }
+});
 
 function syncInfiniteButtonUI(): void {
   if (winState.wildSpacesInfiniteMode) {
@@ -407,13 +474,14 @@ document.getElementById('btn-leaderboard')?.addEventListener('click', () => {
     )}
   `;
 
-  infoModal.classList.add('active');
+  openInfoModal();
 });
 
 // Topbar: Switch to World Habitat Map
 document.getElementById('btn-hub')?.addEventListener('click', () => {
   impactModal.classList.remove('active');
-  infoModal.classList.remove('active');
+  closeInfoModal();
+  globalPauseManager.setManualPause(false);
   if (game.scene.isActive('HubScene')) {
     game.scene.stop('HubScene');
     game.scene.start(activeEpisodeKey);
@@ -471,7 +539,7 @@ document.getElementById('btn-artist-spec')?.addEventListener('click', () => {
     </p>
   `;
 
-  infoModal.classList.add('active');
+  openInfoModal();
 });
 
 // Topbar: Charity / WWF Integration Guide & Direct Link
@@ -502,9 +570,29 @@ document.getElementById('btn-charity')?.addEventListener('click', () => {
     </p>
   `;
 
-  infoModal.classList.add('active');
+  openInfoModal();
 });
 
 document.getElementById('btn-info-close')?.addEventListener('click', () => {
-  infoModal.classList.remove('active');
+  closeInfoModal();
+});
+
+// Pause modal buttons
+document.getElementById('btn-pause-resume')?.addEventListener('click', () => {
+  globalPauseManager.setManualPause(false);
+});
+
+document.getElementById('btn-pause-retry')?.addEventListener('click', () => {
+  globalPauseManager.setManualPause(false);
+  game.scene.stop('HubScene');
+  game.scene.stop('PolarBearScene');
+  game.scene.stop('WhaleScene');
+  game.scene.start(activeEpisodeKey, { level: 1 });
+});
+
+document.getElementById('btn-pause-hub')?.addEventListener('click', () => {
+  globalPauseManager.setManualPause(false);
+  game.scene.stop('PolarBearScene');
+  game.scene.stop('WhaleScene');
+  game.scene.start('HubScene');
 });

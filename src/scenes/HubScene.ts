@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { globalPauseManager } from '../systems/PauseManager';
 
 interface EpisodeCard {
   id: string;
@@ -53,6 +54,7 @@ export class HubScene extends Phaser.Scene {
   }
 
   create(): void {
+    globalPauseManager.detachScene();
     const { width, height } = this.scale;
 
     // Deep atmospheric background

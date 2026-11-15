@@ -8,6 +8,7 @@ import {
   EpisodeUIManager,
   getStaminaSpeedMultiplier,
 } from '../systems/EpisodeUIManager';
+import { globalPauseManager } from '../systems/PauseManager';
 
 interface CopepodBloom {
   x: number;
@@ -250,11 +251,12 @@ export class WhaleScene extends Phaser.Scene {
       accentColor: 0x818cf8,
       accentHex: '#818cf8',
       bottomHint:
-        'WASD / Arrows: Swim  •  SPACE: Sing (Echolocation Call to Reveal Food, Nets & Calf Bearing)',
+        'WASD / Arrows: Swim  •  SPACE: Sing (Reveal Food, Nets & Calf Bearing)  •  P / ESC: Pause',
       worldUiYOffset: 84,
       worldBarWidth: 78,
     });
     this.uiManager.redrawViewportBg(0x030b17);
+    globalPauseManager.attachScene(this);
 
     // Emit an initial welcome sonar pulse so the player immediately sees the first bearing echo
     this.emitWhaleCall(true);
@@ -746,7 +748,7 @@ export class WhaleScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    if (this.isEnding) return;
+    if (this.isEnding || globalPauseManager.isPaused()) return;
 
     const dt = delta / 1000;
     this.levelElapsedSeconds += dt;
@@ -1376,6 +1378,7 @@ export class WhaleScene extends Phaser.Scene {
   ): void {
     if (this.isEnding) return;
     this.isEnding = true;
+    globalPauseManager.setGameEnded(true);
 
     const totalSwimMeters =
       this.cumulativeSwumBeforeLevel +
