@@ -304,6 +304,7 @@ export class WhaleScene extends Phaser.Scene {
    */
   private getDifficultyProfile(): {
     bloomSpacingY: number;
+    bloomSpawnChance: number;
     ghostNetChance: number;
     routeBuoyCount: number;
     ambientBuoyCount: number;
@@ -315,10 +316,12 @@ export class WhaleScene extends Phaser.Scene {
     maskedDecayMultiplier: number;
   } {
     const lvlOffset = this.level - 1;
-    // Blooms become sparser (from every 310px down to a floor of every 520px)
-    const bloomSpacingY = Math.min(520, 310 + lvlOffset * 42);
+    // Concentric rings are spaced wider apart (starting at 480px on Level 1 up to 720px)
+    const bloomSpacingY = Math.min(720, 480 + lvlOffset * 55);
+    // Only a fraction of sector nodes contain a Copepod Bloom (42% on Level 1 down to 20% floor)
+    const bloomSpawnChance = Math.max(0.2, 0.42 - lvlOffset * 0.05);
     // Ghost net density increases up to a cap
-    const ghostNetChance = Math.min(0.88, 0.5 + lvlOffset * 0.08);
+    const ghostNetChance = Math.min(0.9, 0.55 + lvlOffset * 0.08);
     // Seismic survey buoys along the calf route start at 4 on Level 1 and increase by +3 per level (up to 19)
     const routeBuoyCount = Math.min(19, 4 + lvlOffset * 3);
     // Ambient 360° ocean seismic buoys start at 6 on Level 1 and increase by +4 per level (up to 26)
@@ -334,6 +337,7 @@ export class WhaleScene extends Phaser.Scene {
 
     return {
       bloomSpacingY,
+      bloomSpawnChance,
       ghostNetChance,
       routeBuoyCount,
       ambientBuoyCount,
@@ -408,34 +412,33 @@ export class WhaleScene extends Phaser.Scene {
   private spawnOceanMigrationField(): void {
     const {
       bloomSpacingY,
+      bloomSpawnChance,
       ghostNetChance,
       routeBuoyCount,
       ambientBuoyCount,
     } = this.getDifficultyProfile();
 
-    // Guaranteed starting copepod bloom & nearby ghost net near spawn (disguised until sonar sweeps them)
+    // Single nearby ghost net near spawn to teach sonar identification early
     const introAngle = this.calfAngle + 0.35;
-    this.createCopepodBloom(
-      this.startX + Math.cos(introAngle) * 260,
-      this.startY + Math.sin(introAngle) * 260
-    );
     this.createGhostNet(
-      this.startX + Math.cos(introAngle - 0.9) * 290,
-      this.startY + Math.sin(introAngle - 0.9) * 290
+      this.startX + Math.cos(introAngle - 0.9) * 310,
+      this.startY + Math.sin(introAngle - 0.9) * 310
     );
 
     const corridorPoints = this.getCorridorCenters();
     const isInsideCorridor = (y: number): boolean =>
       corridorPoints.some((c) => Math.abs(y - c.y) < 210);
 
-    // Populate 360-degree concentric rings around the starting position so every direction has food & traps
+    // Populate 360-degree concentric rings around the starting position with scarce food & traps
     for (
-      let r = 420;
+      let r = 520;
       r <= this.targetRadiusPx + 350;
       r += bloomSpacingY
     ) {
       const circumference = 2 * Math.PI * r;
-      const sectorCount = Math.max(6, Math.round(circumference / 560));
+      const sectorCount = Math.max(5, Math.round(circumference / 820));
+      let spawnedBloomInRing = false;
+
       for (let s = 0; s < sectorCount; s++) {
         const theta =
           (s / sectorCount) * Math.PI * 2 +
@@ -448,15 +451,23 @@ export class WhaleScene extends Phaser.Scene {
           continue;
         }
 
-        this.createCopepodBloom(bx, by);
+        // Only spawn a copepod bloom in a subset of sectors (ensuring at least 1 per ring)
+        const isLastSector = s === sectorCount - 1;
+        if (
+          Math.random() < bloomSpawnChance ||
+          (!spawnedBloomInRing && isLastSector)
+        ) {
+          this.createCopepodBloom(bx, by);
+          spawnedBloomInRing = true;
+        }
 
-        // Spawn 1-2 disguised ghost nets offset from the bloom
+        // Spawn 1-2 disguised ghost nets in the sector
         const netCount = Math.random() < ghostNetChance ? 2 : 1;
         for (let n = 0; n < netCount; n++) {
           const offsetAngle =
             theta +
-            (n === 0 ? 1 : -1) * Phaser.Math.FloatBetween(0.08, 0.2);
-          const netR = r + Phaser.Math.Between(-95, 95);
+            (n === 0 ? 1 : -1) * Phaser.Math.FloatBetween(0.08, 0.22);
+          const netR = r + Phaser.Math.Between(-110, 110);
           const nx = this.startX + Math.cos(offsetAngle) * netR;
           const ny = this.startY + Math.sin(offsetAngle) * netR;
           if (!isInsideCorridor(ny)) {

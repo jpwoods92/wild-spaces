@@ -65,7 +65,7 @@ export class PolarBearScene extends Phaser.Scene {
   private iceGapMin = 310;
   private iceGapMax = 380;
   private twoFloeChance = 0.38;
-  private sealSpawnChance = 0.62;
+  private sealSpawnChance = 0.42;
 
   private bear!: Phaser.GameObjects.Sprite;
   private cub!: Phaser.GameObjects.Image;
@@ -139,8 +139,8 @@ export class PolarBearScene extends Phaser.Scene {
     this.iceGapMax = Math.min(510, 380 + (this.level - 1) * 26);
     this.twoFloeChance = Math.max(0.06, 0.38 - (this.level - 1) * 0.065);
 
-    // 3. Fewer and fewer seals down to a minimum spawn chance (20% floor at Level 6+)
-    this.sealSpawnChance = Math.max(0.2, 0.62 - (this.level - 1) * 0.085);
+    // 3. Fewer and fewer seals down to a minimum spawn chance (18% floor at Level 6+)
+    this.sealSpawnChance = Math.max(0.18, 0.42 - (this.level - 1) * 0.055);
 
     // Carry over run telemetry if advancing to Level 2+
     this.cumulativeMetersBeforeLevel = data?.cumulativeMeters ?? 0;
@@ -413,12 +413,12 @@ export class PolarBearScene extends Phaser.Scene {
           }
         }
 
-        // Seal spawning scales down to `sealSpawnChance` floor (20%), with a 5-floe pity guarantee
+        // Seal spawning scales down to `sealSpawnChance` floor (18%), with a 6-floe pity guarantee
         if (placedFloe) {
           floesSinceLastSeal++;
           if (
             Math.random() < this.sealSpawnChance ||
-            floesSinceLastSeal >= 5
+            floesSinceLastSeal >= 6
           ) {
             this.spawnSealOnFloe(placedFloe);
             floesSinceLastSeal = 0;
