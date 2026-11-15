@@ -424,8 +424,12 @@ export class WhaleScene extends Phaser.Scene {
       ambientBuoyCount,
     } = this.getDifficultyProfile();
 
-    // Single nearby ghost net near spawn to teach sonar identification early
+    // Guaranteed starting copepod bloom & nearby ghost net near spawn (disguised until sonar sweeps them)
     const introAngle = this.calfAngle + 0.35;
+    this.createCopepodBloom(
+      this.startX + Math.cos(introAngle) * 280,
+      this.startY + Math.sin(introAngle) * 280
+    );
     this.createGhostNet(
       this.startX + Math.cos(introAngle - 0.9) * 310,
       this.startY + Math.sin(introAngle - 0.9) * 310
@@ -438,7 +442,7 @@ export class WhaleScene extends Phaser.Scene {
     // Populate 360-degree concentric rings around the starting position using shared food scarcity schedule
     let nodesSinceLastBloom = 0;
     for (
-      let r = 560;
+      let r = 460;
       r <= this.targetRadiusPx + 350;
       r += bloomSpacingY
     ) {
@@ -1232,12 +1236,20 @@ export class WhaleScene extends Phaser.Scene {
   }
 
   private updateSurvivalMeters(dt: number): void {
-    const isMoving = Math.hypot(this.whaleVx, this.whaleVy) > 18;
+    const isMoving = Math.hypot(this.whaleVx, this.whaleVy) > 24;
 
-    // Base stamina burn + extra drag from entangled fishing lines
-    const baseDrain = isMoving ? 2.4 : 1.1;
-    const entangleDrain = this.entangledStacks * 2.1;
-    this.stamina = Math.max(0, this.stamina - (baseDrain + entangleDrain) * dt);
+    if (isMoving) {
+      // Swimming burns stamina + extra drag from entangled fishing lines
+      const swimDrain = 3.2 + this.entangledStacks * 2.1;
+      this.stamina = Math.max(0, this.stamina - swimDrain * dt);
+    } else {
+      // Resting (not moving) restores stamina up to current maxStamina ceiling
+      const restRecoveryRate = Math.max(5, 14 - this.entangledStacks * 3);
+      this.stamina = Math.min(
+        this.maxStamina,
+        this.stamina + restRecoveryRate * dt
+      );
+    }
 
     // Max stamina ceiling erodes slowly over open-water migration, and faster when entangled or in loud noise
     const maxDecayRate =
@@ -1331,11 +1343,14 @@ export class WhaleScene extends Phaser.Scene {
   }
 
   private renderWhaleWorldUI(): void {
+    const isResting = Math.hypot(this.whaleVx, this.whaleVy) <= 24;
     const fillCol =
       this.stamina < 28
         ? 0xef4444
         : this.entangledStacks > 0
         ? 0xf97316
+        : isResting
+        ? 0x34d399
         : 0x38bdf8;
 
     let secondaryBar:

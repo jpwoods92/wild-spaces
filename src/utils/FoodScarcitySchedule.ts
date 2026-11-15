@@ -13,26 +13,26 @@ export interface FoodScarcityProfile {
 
 /**
  * Shared food/prey scarcity curve used across all Wild Spaces episodes.
- * Keeps Level 1 food genuinely scarce (~28% per candidate node) and scales
- * scarcity progressively on higher levels down to a 12% floor.
+ * Starts at a balanced 46% spawn chance per candidate node on Level 1 and scales
+ * down progressively on higher levels to a 24% minimum floor.
  */
 export function getFoodScarcityProfile(level: number): FoodScarcityProfile {
   const safeLevel = Math.max(1, Math.floor(level));
   const lvlOffset = safeLevel - 1;
 
-  // Starts scarce on Level 1 (28%) and drops by 3.5% per level down to a 12% floor
+  // Starts at 46% on Level 1 and drops by 4% per level down to a 24% floor
   const foodSpawnChance = Number(
-    clamp(0.28 - lvlOffset * 0.035, 0.12, 0.28).toFixed(3)
+    clamp(0.46 - lvlOffset * 0.04, 0.24, 0.46).toFixed(3)
   );
 
-  // Guaranteed pity threshold grows from every 8 candidate nodes on Level 1 up to 13
-  const pityIntervalNodes = Math.min(13, 8 + lvlOffset);
+  // Guaranteed pity threshold grows from every 5 candidate nodes on Level 1 up to 8
+  const pityIntervalNodes = Math.min(8, 5 + Math.floor(lvlOffset * 0.75));
 
-  // Radial band spacing widens from 560px on Level 1 up to 800px
-  const bandSpacingPx = Math.min(800, 560 + lvlOffset * 60);
+  // Radial band spacing starts at 440px on Level 1 up to 640px
+  const bandSpacingPx = Math.min(640, 440 + lvlOffset * 45);
 
-  // Lateral/circumferential arc spacing widens from 980px on Level 1 up to 1260px
-  const sectorArcSpacingPx = Math.min(1260, 980 + lvlOffset * 70);
+  // Lateral/circumferential arc spacing starts at 720px on Level 1 up to 920px
+  const sectorArcSpacingPx = Math.min(920, 720 + lvlOffset * 45);
 
   return {
     foodSpawnChance,

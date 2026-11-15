@@ -69,7 +69,7 @@ export class PolarBearScene extends Phaser.Scene {
   private iceGapMin = 310;
   private iceGapMax = 380;
   private twoFloeChance = 0.38;
-  private sealSpawnChance = 0.28;
+  private sealSpawnChance = 0.46;
 
   private bear!: Phaser.GameObjects.Sprite;
   private cub!: Phaser.GameObjects.Image;
