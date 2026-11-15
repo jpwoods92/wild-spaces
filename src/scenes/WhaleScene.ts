@@ -1396,8 +1396,8 @@ export class WhaleScene extends Phaser.Scene {
     const barW = 78;
     const barH = 9;
     const bx = this.whaleX - barW / 2;
-    // Place the Stamina bar well above the whale's rostrum (74px above center)
-    const by = this.whaleY - 74;
+    // Place the Stamina bar well above the longer whale's rostrum (84px above center)
+    const by = this.whaleY - 84;
 
     // 1. Stamina Bar backdrop pill
     this.bearUiGraphics.fillStyle(0x040d17, 0.9);

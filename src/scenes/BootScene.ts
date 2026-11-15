@@ -251,90 +251,218 @@ export class BootScene extends Phaser.Scene {
   }
 
   private generateWhaleTextures(): void {
-    // 1. Adult North Atlantic Right Whale (top-down, facing right / 0 rad, 112x64)
+    // 1. Adult Whale (top-down, facing right / 0 rad, 136x80 — long tapering body with pronounced fins)
     if (!this.textures.exists('whale_swim')) {
       const g = this.make.graphics({ x: 0, y: 0 });
+      const cy = 40;
 
       // Subtle bioluminescent / deep water aura
-      g.fillStyle(0x38bdf8, 0.14);
-      g.fillEllipse(60, 32, 92, 48);
+      g.fillStyle(0x38bdf8, 0.12);
+      g.fillEllipse(76, cy, 118, 54);
 
-      // Broad tail flukes (left side, x=2..24)
+      // Sweeping, pronounced pectoral flippers angling backward from the chest
       g.fillStyle(0x0f172a, 1);
-      g.fillTriangle(4, 8, 26, 29, 12, 32);
-      g.fillTriangle(4, 56, 26, 35, 12, 32);
-      // Tail notch highlight
-      g.lineStyle(1.5, 0x475569, 0.7);
-      g.lineBetween(4, 8, 22, 28);
-      g.lineBetween(4, 56, 22, 36);
+      g.fillPoints(
+        [
+          new Phaser.Geom.Point(92, cy - 13),
+          new Phaser.Geom.Point(74, 4),
+          new Phaser.Geom.Point(64, 7),
+          new Phaser.Geom.Point(75, cy - 11),
+        ],
+        true
+      );
+      g.fillPoints(
+        [
+          new Phaser.Geom.Point(92, cy + 13),
+          new Phaser.Geom.Point(74, 76),
+          new Phaser.Geom.Point(64, 73),
+          new Phaser.Geom.Point(75, cy + 11),
+        ],
+        true
+      );
+      g.lineStyle(1.5, 0x64748b, 0.65);
+      g.strokePoints(
+        [
+          new Phaser.Geom.Point(92, cy - 13),
+          new Phaser.Geom.Point(74, 4),
+          new Phaser.Geom.Point(64, 7),
+          new Phaser.Geom.Point(75, cy - 11),
+        ],
+        true
+      );
+      g.strokePoints(
+        [
+          new Phaser.Geom.Point(92, cy + 13),
+          new Phaser.Geom.Point(74, 76),
+          new Phaser.Geom.Point(64, 73),
+          new Phaser.Geom.Point(75, cy + 11),
+        ],
+        true
+      );
 
-      // Tail stock (peduncle)
+      // Broad, sweeping crescent tail flukes at x=4..26
+      g.fillStyle(0x0f172a, 1);
+      g.fillPoints(
+        [
+          new Phaser.Geom.Point(26, cy - 3),
+          new Phaser.Geom.Point(6, cy - 24),
+          new Phaser.Geom.Point(3, cy - 19),
+          new Phaser.Geom.Point(13, cy),
+          new Phaser.Geom.Point(3, cy + 19),
+          new Phaser.Geom.Point(6, cy + 24),
+          new Phaser.Geom.Point(26, cy + 3),
+        ],
+        true
+      );
+      g.lineStyle(1.2, 0x64748b, 0.6);
+      g.lineBetween(24, cy - 3, 6, cy - 23);
+      g.lineBetween(24, cy + 3, 6, cy + 23);
+
+      // Long streamlined body tapering smoothly from broad head/shoulders (x=96) to narrow tail stock (x=22)
+      g.fillStyle(0x0f172a, 1);
+      g.fillPoints(
+        [
+          new Phaser.Geom.Point(130, cy),
+          new Phaser.Geom.Point(124, cy - 10),
+          new Phaser.Geom.Point(108, cy - 16),
+          new Phaser.Geom.Point(86, cy - 17),
+          new Phaser.Geom.Point(60, cy - 12),
+          new Phaser.Geom.Point(38, cy - 6),
+          new Phaser.Geom.Point(20, cy - 3),
+          new Phaser.Geom.Point(20, cy + 3),
+          new Phaser.Geom.Point(38, cy + 6),
+          new Phaser.Geom.Point(60, cy + 12),
+          new Phaser.Geom.Point(86, cy + 17),
+          new Phaser.Geom.Point(108, cy + 16),
+          new Phaser.Geom.Point(124, cy + 10),
+        ],
+        true
+      );
+
+      // Inner dorsal contour highlight (tapering toward tail)
       g.fillStyle(0x1e293b, 1);
-      g.fillEllipse(32, 32, 30, 16);
+      g.fillPoints(
+        [
+          new Phaser.Geom.Point(124, cy),
+          new Phaser.Geom.Point(116, cy - 8),
+          new Phaser.Geom.Point(92, cy - 13),
+          new Phaser.Geom.Point(62, cy - 9),
+          new Phaser.Geom.Point(34, cy - 3.5),
+          new Phaser.Geom.Point(34, cy + 3.5),
+          new Phaser.Geom.Point(62, cy + 9),
+          new Phaser.Geom.Point(92, cy + 13),
+          new Phaser.Geom.Point(116, cy + 8),
+        ],
+        true
+      );
 
-      // Paddle-shaped pectoral flippers
-      g.fillStyle(0x0f172a, 1);
-      g.fillEllipse(66, 10, 22, 11);
-      g.fillEllipse(66, 54, 22, 11);
-      g.lineStyle(1, 0x64748b, 0.5);
-      g.strokeEllipse(66, 10, 22, 11);
-      g.strokeEllipse(66, 54, 22, 11);
+      // Pronounced dorsal fin & dorsal ridge along the posterior back (x=42..64)
+      g.fillStyle(0x020617, 0.85);
+      g.fillEllipse(53, cy + 2, 22, 7);
+      g.fillStyle(0x475569, 0.95);
+      g.fillPoints(
+        [
+          new Phaser.Geom.Point(64, cy),
+          new Phaser.Geom.Point(50, cy - 3.5),
+          new Phaser.Geom.Point(41, cy),
+          new Phaser.Geom.Point(50, cy + 3.5),
+        ],
+        true
+      );
+      g.lineStyle(1.5, 0x94a3b8, 0.85);
+      g.lineBetween(63, cy, 42, cy);
 
-      // Rotund dark slate-black body (Right Whales have broad backs and no dorsal fin)
-      g.fillStyle(0x0f172a, 1);
-      g.fillEllipse(64, 32, 68, 36);
-      g.fillStyle(0x1e293b, 1);
-      g.fillEllipse(66, 32, 58, 28);
+      // Head callosities & rostrum ridge
+      g.fillStyle(0xe2e8f0, 0.9);
+      g.fillEllipse(116, cy, 11, 5.5);
+      g.fillCircle(107, cy - 7, 2.2);
+      g.fillCircle(107, cy + 7, 2.2);
 
-      // Broad arched head / rostrum
-      g.fillStyle(0x0f172a, 1);
-      g.fillEllipse(90, 32, 34, 26);
+      // Blowholes behind head
+      g.fillStyle(0x64748b, 0.95);
+      g.fillCircle(97, cy - 2.2, 1.5);
+      g.fillCircle(97, cy + 2.2, 1.5);
 
-      // Distinctive pale/rough callosity patches on rostrum & brow (signature of Right Whales)
-      g.fillStyle(0xe2e8f0, 0.92);
-      g.fillEllipse(98, 32, 11, 7); // Bonnet callosity
-      g.fillCircle(91, 25, 2.5); // Brow callosities
-      g.fillCircle(91, 39, 2.5);
-      g.fillCircle(103, 28, 2);
-      g.fillCircle(103, 36, 2);
-
-      // V-shaped blowholes behind head
-      g.fillStyle(0x64748b, 0.9);
-      g.fillCircle(80, 29.5, 1.6);
-      g.fillCircle(80, 34.5, 1.6);
-
-      g.generateTexture('whale_swim', 112, 64);
+      g.generateTexture('whale_swim', 136, 80);
       g.destroy();
     }
 
-    // 2. Right Whale Calf (top-down, facing right / 0 rad, 64x38)
+    // 2. Whale Calf (top-down, facing right / 0 rad, 84x52 — sleek tapering body & fins)
     if (!this.textures.exists('whale_calf')) {
       const g = this.make.graphics({ x: 0, y: 0 });
-      g.fillStyle(0x38bdf8, 0.22);
-      g.fillEllipse(34, 19, 52, 28);
+      const cy = 26;
+      g.fillStyle(0x38bdf8, 0.2);
+      g.fillEllipse(46, cy, 70, 34);
+
+      // Sweeping pectoral flippers
+      g.fillStyle(0x1e293b, 1);
+      g.fillPoints(
+        [
+          new Phaser.Geom.Point(56, cy - 8),
+          new Phaser.Geom.Point(44, 3),
+          new Phaser.Geom.Point(38, 5),
+          new Phaser.Geom.Point(45, cy - 7),
+        ],
+        true
+      );
+      g.fillPoints(
+        [
+          new Phaser.Geom.Point(56, cy + 8),
+          new Phaser.Geom.Point(44, 49),
+          new Phaser.Geom.Point(38, 47),
+          new Phaser.Geom.Point(45, cy + 7),
+        ],
+        true
+      );
 
       // Tail flukes
+      g.fillPoints(
+        [
+          new Phaser.Geom.Point(16, cy - 2),
+          new Phaser.Geom.Point(4, cy - 15),
+          new Phaser.Geom.Point(2, cy - 12),
+          new Phaser.Geom.Point(8, cy),
+          new Phaser.Geom.Point(2, cy + 12),
+          new Phaser.Geom.Point(4, cy + 15),
+          new Phaser.Geom.Point(16, cy + 2),
+        ],
+        true
+      );
+
+      // Streamlined tapering body
       g.fillStyle(0x1e293b, 1);
-      g.fillTriangle(3, 6, 16, 17, 8, 19);
-      g.fillTriangle(3, 32, 16, 21, 8, 19);
+      g.fillPoints(
+        [
+          new Phaser.Geom.Point(78, cy),
+          new Phaser.Geom.Point(72, cy - 7),
+          new Phaser.Geom.Point(54, cy - 11),
+          new Phaser.Geom.Point(34, cy - 7),
+          new Phaser.Geom.Point(13, cy - 2),
+          new Phaser.Geom.Point(13, cy + 2),
+          new Phaser.Geom.Point(34, cy + 7),
+          new Phaser.Geom.Point(54, cy + 11),
+          new Phaser.Geom.Point(72, cy + 7),
+        ],
+        true
+      );
 
-      // Flippers
-      g.fillEllipse(38, 6, 13, 6);
-      g.fillEllipse(38, 32, 13, 6);
+      // Pronounced dorsal fin ridge on calf
+      g.fillStyle(0x64748b, 0.95);
+      g.fillPoints(
+        [
+          new Phaser.Geom.Point(40, cy),
+          new Phaser.Geom.Point(31, cy - 2.5),
+          new Phaser.Geom.Point(25, cy),
+          new Phaser.Geom.Point(31, cy + 2.5),
+        ],
+        true
+      );
 
-      // Body
-      g.fillStyle(0x1e293b, 1);
-      g.fillEllipse(36, 19, 40, 21);
-      g.fillStyle(0x334155, 1);
-      g.fillEllipse(38, 19, 32, 16);
-
-      // Calf head callosities
+      // Calf head callosity
       g.fillStyle(0xf1f5f9, 0.9);
-      g.fillEllipse(54, 19, 7, 4.5);
-      g.fillCircle(49, 15, 1.6);
-      g.fillCircle(49, 23, 1.6);
+      g.fillEllipse(69, cy, 7, 3.5);
 
-      g.generateTexture('whale_calf', 64, 38);
+      g.generateTexture('whale_calf', 84, 52);
       g.destroy();
     }
 
