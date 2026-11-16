@@ -6,7 +6,12 @@ import {
   PolarBearSceneData,
 } from './scenes/PolarBearScene';
 import { WhaleScene, WhaleSceneData } from './scenes/WhaleScene';
-import { POLAR_BEAR_ASSETS, WHALE_ASSETS } from './config/AssetManifest';
+import { LemurScene, LemurSceneData } from './scenes/LemurScene';
+import {
+  LEMUR_ASSETS,
+  POLAR_BEAR_ASSETS,
+  WHALE_ASSETS,
+} from './config/AssetManifest';
 import {
   formatDuration,
   getAllEpisodeBestByLevel,
@@ -26,14 +31,40 @@ const config: Phaser.Types.Core.GameConfig = {
     width: window.innerWidth,
     height: window.innerHeight - 52,
   },
-  scene: [BootScene, WhaleScene, PolarBearScene, HubScene],
+  scene: [BootScene, LemurScene, WhaleScene, PolarBearScene, HubScene],
 };
 
 const game = new Phaser.Game(config);
 
+type PlayableEpisodeKey = 'PolarBearScene' | 'WhaleScene' | 'LemurScene';
+const EPISODE_KEYS: PlayableEpisodeKey[] = [
+  'PolarBearScene',
+  'WhaleScene',
+  'LemurScene',
+];
+
+function stopGameplayScenes(): void {
+  for (const key of EPISODE_KEYS) {
+    game.scene.stop(key);
+  }
+}
+
+function getDetectedEpisodeKey(): PlayableEpisodeKey {
+  for (const key of EPISODE_KEYS) {
+    if (game.scene.isActive(key)) {
+      return key;
+    }
+  }
+  return activeEpisodeKey;
+}
+
 // Track which episode is active for modal retry/continue actions
-let activeEpisodeKey: 'PolarBearScene' | 'WhaleScene' = 'WhaleScene';
-let pendingNextLevelData: PolarBearSceneData | WhaleSceneData | null = null;
+let activeEpisodeKey: PlayableEpisodeKey = 'LemurScene';
+let pendingNextLevelData:
+  | PolarBearSceneData
+  | WhaleSceneData
+  | LemurSceneData
+  | null = null;
 
 // Global Infinite Mode option state
 const winState = window as unknown as {
@@ -66,6 +97,21 @@ const winState = window as unknown as {
     levelTimeSeconds: number;
     totalTimeSeconds: number;
     nextLevelData: WhaleSceneData;
+  }) => void;
+  showLemurImpactModal: (payload: {
+    won: boolean;
+    deathReason?: 'exhaustion' | 'truck';
+    level: number;
+    levelTargetMeters: number;
+    metersInLevel: number;
+    totalMetersMigrated: number;
+    nextLevelMeters: number;
+    groundMeters: number;
+    fruitCollected: number;
+    treesFelled: number;
+    levelTimeSeconds: number;
+    totalTimeSeconds: number;
+    nextLevelData: LemurSceneData;
   }) => void;
 };
 winState.wildSpacesInfiniteMode = false;
@@ -225,7 +271,7 @@ function renderImpactLeaderboard(params: {
 }
 
 interface EpisodeImpactModalDescriptor {
-  episodeId: 'PolarBearScene' | 'WhaleScene';
+  episodeId: PlayableEpisodeKey;
   episodeLabel: string;
   level: number;
   won: boolean;
@@ -233,7 +279,7 @@ interface EpisodeImpactModalDescriptor {
   titleText: string;
   summaryText: string;
   nextButtonLabel?: string;
-  nextLevelData: PolarBearSceneData | WhaleSceneData | null;
+  nextLevelData: PolarBearSceneData | WhaleSceneData | LemurSceneData | null;
   totalMetersMigrated: number;
   stat2Value: string;
   stat2Label: string;
@@ -384,12 +430,52 @@ winState.showWhaleImpactModal = (payload) => {
   });
 };
 
+// Expose impact modal hook for Episode 3 (LemurScene)
+winState.showLemurImpactModal = (payload) => {
+  openEpisodeImpactModal({
+    episodeId: 'LemurScene',
+    episodeLabel: 'Ring-Tailed Lemur',
+    level: payload.level,
+    won: payload.won,
+    tagText: payload.won
+      ? `Episode 3 • Level ${payload.level} Complete`
+      : payload.deathReason === 'truck'
+      ? `Haul Road Impact • Level ${payload.level}`
+      : `Exhausted in Deforested Gap • Level ${payload.level}`,
+    titleText: payload.won
+      ? 'Reached the Ancient Baobab Sanctuary'
+      : payload.deathReason === 'truck'
+      ? 'Struck on an Illegal Logging Haul Road'
+      : 'Overwhelmed on the Fractured Forest Floor',
+    summaryText: payload.won
+      ? `Leaping across logging clearings, you guided your lemur ${payload.levelTargetMeters}m in ${formatDuration(
+          payload.levelTimeSeconds
+        )} back to the baobab sanctuary (${payload.treesFelled} trees felled behind you). Continue into Level ${
+          payload.level + 1
+        } (${payload.nextLevelMeters}m) where clear-cut gaps widen and fossa patrols intensify!`
+      : payload.deathReason === 'truck'
+      ? `Clear-cut logging roads carve straight through Madagascar's spiny forest, turning vital canopy crossings into fatal ground dashes (${payload.totalMetersMigrated}m total progress).`
+      : `You traveled ${payload.metersInLevel}m / ${payload.levelTargetMeters}m on Level ${payload.level} (${payload.totalMetersMigrated}m total) before heat exposure and fossa ambushes exhausted your stamina.`,
+    nextButtonLabel: `Continue Through Canopy (Level ${payload.level + 1} • ${payload.nextLevelMeters}m →)`,
+    nextLevelData: payload.nextLevelData,
+    totalMetersMigrated: payload.totalMetersMigrated,
+    stat2Value: `${payload.groundMeters}m`,
+    stat2Label: 'Exposed Ground Run',
+    stat3Value: `${payload.fruitCollected}`,
+    stat3Label: 'Tamarind Pods Eaten',
+    levelTimeSeconds: payload.levelTimeSeconds,
+    totalTimeSeconds: payload.totalTimeSeconds,
+    factHeading: 'Madagascar Spiny Forest Deforestation (>80% Lost)',
+    factBody:
+      'More than 80% of Madagascar’s original spiny and dry forests have been cleared for charcoal production and illegal hardwood logging. Forced down onto open ground between fragmented treetops, Ring-Tailed Lemurs face intense heat stress and ambush predators like the Fossa—driving wild populations down by over 95% since 2000.',
+  });
+};
+
 // Impact modal buttons
 document.getElementById('btn-impact-retry')?.addEventListener('click', () => {
   impactModal.classList.remove('active');
   game.scene.stop('HubScene');
-  game.scene.stop('PolarBearScene');
-  game.scene.stop('WhaleScene');
+  stopGameplayScenes();
   game.scene.start(activeEpisodeKey, { level: 1 });
 });
 
@@ -398,15 +484,13 @@ btnNextLevel.addEventListener('click', () => {
   winState.wildSpacesInfiniteMode = true;
   syncInfiniteButtonUI();
   game.scene.stop('HubScene');
-  game.scene.stop('PolarBearScene');
-  game.scene.stop('WhaleScene');
+  stopGameplayScenes();
   game.scene.start(activeEpisodeKey, pendingNextLevelData ?? { level: 2 });
 });
 
 document.getElementById('btn-impact-hub')?.addEventListener('click', () => {
   impactModal.classList.remove('active');
-  game.scene.stop('PolarBearScene');
-  game.scene.stop('WhaleScene');
+  stopGameplayScenes();
   game.scene.start('HubScene');
 });
 
@@ -472,6 +556,10 @@ document.getElementById('btn-leaderboard')?.addEventListener('click', () => {
       'WhaleScene',
       'Episode 2 • Drowned Echoes (Right Whale)'
     )}
+    ${renderEpisodeSection(
+      'LemurScene',
+      'Episode 3 • Fractured Canopy (Ring-Tailed Lemur)'
+    )}
   `;
 
   openInfoModal();
@@ -486,13 +574,8 @@ document.getElementById('btn-hub')?.addEventListener('click', () => {
     game.scene.stop('HubScene');
     game.scene.start(activeEpisodeKey);
   } else {
-    if (game.scene.isActive('PolarBearScene')) {
-      activeEpisodeKey = 'PolarBearScene';
-    } else if (game.scene.isActive('WhaleScene')) {
-      activeEpisodeKey = 'WhaleScene';
-    }
-    game.scene.stop('PolarBearScene');
-    game.scene.stop('WhaleScene');
+    activeEpisodeKey = getDetectedEpisodeKey();
+    stopGameplayScenes();
     game.scene.start('HubScene');
   }
 });
@@ -503,16 +586,37 @@ document.getElementById('btn-artist-spec')?.addEventListener('click', () => {
   const title = document.getElementById('info-title')!;
   const body = document.getElementById('info-body')!;
 
-  const isWhale =
-    game.scene.isActive('WhaleScene') || activeEpisodeKey === 'WhaleScene';
-  const assets = isWhale ? WHALE_ASSETS : POLAR_BEAR_ASSETS;
-  const folder = isWhale ? 'public/assets/whale/' : 'public/assets/polar-bear/';
+  const specByEpisode: Record<
+    PlayableEpisodeKey,
+    {
+      assets: typeof POLAR_BEAR_ASSETS;
+      folder: string;
+      briefLabel: string;
+    }
+  > = {
+    PolarBearScene: {
+      assets: POLAR_BEAR_ASSETS,
+      folder: 'public/assets/polar-bear/',
+      briefLabel: 'Artist Commission Brief (Episode 1 • Polar Bear)',
+    },
+    WhaleScene: {
+      assets: WHALE_ASSETS,
+      folder: 'public/assets/whale/',
+      briefLabel: 'Artist Commission Brief (Episode 2 • Right Whale)',
+    },
+    LemurScene: {
+      assets: LEMUR_ASSETS,
+      folder: 'public/assets/lemur/',
+      briefLabel: 'Artist Commission Brief (Episode 3 • Ring-Tailed Lemur)',
+    },
+  };
+
+  const epKey = getDetectedEpisodeKey();
+  const { assets, folder, briefLabel } = specByEpisode[epKey];
 
   tag.style.display = 'inline-block';
   tag.className = 'modal-tag';
-  tag.textContent = isWhale
-    ? 'Artist Commission Brief (Episode 2 • Right Whale)'
-    : 'Artist Commission Brief (Episode 1 • Polar Bear)';
+  tag.textContent = briefLabel;
   title.textContent = 'Plug-and-Play Sprite Specification';
 
   const rows = assets
@@ -585,14 +689,12 @@ document.getElementById('btn-pause-resume')?.addEventListener('click', () => {
 document.getElementById('btn-pause-retry')?.addEventListener('click', () => {
   globalPauseManager.setManualPause(false);
   game.scene.stop('HubScene');
-  game.scene.stop('PolarBearScene');
-  game.scene.stop('WhaleScene');
+  stopGameplayScenes();
   game.scene.start(activeEpisodeKey, { level: 1 });
 });
 
 document.getElementById('btn-pause-hub')?.addEventListener('click', () => {
   globalPauseManager.setManualPause(false);
-  game.scene.stop('PolarBearScene');
-  game.scene.stop('WhaleScene');
+  stopGameplayScenes();
   game.scene.start('HubScene');
 });

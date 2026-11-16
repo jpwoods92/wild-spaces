@@ -10,6 +10,9 @@ import {
 } from '../systems/ShippingCorridorManager.ts';
 
 function createMockShippingScene(viewportWidth = 1440, scrollX = 6880) {
+  const imageTextures: string[] = [];
+  const wakeFillColors: number[] = [];
+
   const scene = {
     scale: { width: viewportWidth, height: 900 },
     cameras: {
@@ -23,7 +26,8 @@ function createMockShippingScene(viewportWidth = 1440, scrollX = 6880) {
         setDepth() {
           return this;
         },
-        fillStyle() {
+        fillStyle(color: number) {
+          wakeFillColors.push(color);
           return this;
         },
         fillRect() {
@@ -54,29 +58,36 @@ function createMockShippingScene(viewportWidth = 1440, scrollX = 6880) {
           return this;
         },
       }),
-      image: (x: number, y: number) => ({
-        x,
-        y,
-        destroyed: false,
-        setDepth() {
-          return this;
-        },
-        setFlipX() {
-          return this;
-        },
-        setPosition(nx: number, ny: number) {
-          this.x = nx;
-          this.y = ny;
-          return this;
-        },
-        destroy() {
-          this.destroyed = true;
-        },
-      }),
+      image: (x: number, y: number, key: string) => {
+        imageTextures.push(key);
+        return {
+          x,
+          y,
+          destroyed: false,
+          setDepth() {
+            return this;
+          },
+          setFlipX() {
+            return this;
+          },
+          setPosition(nx: number, ny: number) {
+            this.x = nx;
+            this.y = ny;
+            return this;
+          },
+          destroy() {
+            this.destroyed = true;
+          },
+        };
+      },
     },
   };
 
-  return scene as unknown as Phaser.Scene;
+  return {
+    scene: scene as unknown as Phaser.Scene,
+    imageTextures,
+    wakeFillColors,
+  };
 }
 
 describe('ShippingCorridorManager & off-screen vessel helpers', () => {
@@ -143,7 +154,7 @@ describe('ShippingCorridorManager & off-screen vessel helpers', () => {
 
   describe('ShippingCorridorManager lifecycle', () => {
     it('spawns 2 opposing lanes per corridor, wraps ships off-screen, fires pulses, and detects collisions', () => {
-      const scene = createMockShippingScene(1440, 6880); // camCenterX = 6880 + 720 = 7600
+      const { scene } = createMockShippingScene(1440, 6880); // camCenterX = 6880 + 720 = 7600
       const manager = new ShippingCorridorManager(scene);
 
       manager.spawnCorridors({
@@ -186,6 +197,34 @@ describe('ShippingCorridorManager & off-screen vessel helpers', () => {
 
       manager.clear();
       assert.equal(manager.getShips().length, 0);
+    });
+
+    it('supports custom terrestrial textureKey and dust wakeStyle for logging haul roads', () => {
+      const { scene, imageTextures, wakeFillColors } = createMockShippingScene(
+        1440,
+        480
+      );
+      const manager = new ShippingCorridorManager(scene);
+
+      manager.spawnCorridors({
+        corridors: [{ x: 1200, y: 2000 }],
+        worldWidth: 2400,
+        bannerText: 'LOGGING HAUL ROAD',
+        shipsPerLane: 1,
+        eastboundSpeed: 190,
+        westboundSpeed: 210,
+        textureKey: 'logging_truck',
+        wakeStyle: 'dust',
+      });
+
+      assert.deepEqual(imageTextures, ['logging_truck', 'logging_truck']);
+      assert.equal(manager.getShips()[0].wakeStyle, 'dust');
+
+      wakeFillColors.length = 0;
+      manager.update(0.1, { playerX: 0, playerY: 0 });
+      assert.ok(wakeFillColors.includes(0xd97706));
+
+      manager.clear();
     });
   });
 });

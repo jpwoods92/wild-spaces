@@ -111,3 +111,63 @@ export const WHALE_ASSETS: SpriteAssetSpec[] = [
     useExternalFile: false,
   },
 ];
+
+/**
+ * Central manifest for Episode 3 (Ring-Tailed Lemur — "Fractured Canopy").
+ */
+export const LEMUR_ASSETS: SpriteAssetSpec[] = [
+  {
+    key: 'lemur_walk',
+    description:
+      'Top-down adult Ring-Tailed Lemur with grey-agouti back, dark eye mask, and iconic black-and-white banded tail (facing right / 0 rad)',
+    dimensions: '68x44 px per frame',
+    frames: 4,
+    filePath: '/assets/lemur/lemur_walk.png',
+    useExternalFile: false,
+  },
+  {
+    key: 'lemur_leap',
+    description:
+      'Top-down Ring-Tailed Lemur mid-leap between tree crowns with outstretched limbs and streaming banded tail',
+    dimensions: '76x48 px single frame',
+    frames: 1,
+    filePath: '/assets/lemur/lemur_leap.png',
+    useExternalFile: false,
+  },
+  {
+    key: 'lemur_troop',
+    description:
+      'Top-down Ring-Tailed Lemur juvenile waiting in the Ancient Baobab Sanctuary',
+    dimensions: '44x32 px per frame',
+    frames: 2,
+    filePath: '/assets/lemur/lemur_troop.png',
+    useExternalFile: false,
+  },
+  {
+    key: 'tamarind_fruit',
+    description:
+      'Ripe Tamarind pods & wild fig cluster glowing inside the canopy crown',
+    dimensions: '44x44 px per frame',
+    frames: 2,
+    filePath: '/assets/lemur/tamarind_fruit.png',
+    useExternalFile: false,
+  },
+  {
+    key: 'fossa_predator',
+    description:
+      'Top-down Fossa (Cryptoprocta ferox) ground ambush predator with reddish-brown coat and long tail',
+    dimensions: '68x36 px per frame',
+    frames: 4,
+    filePath: '/assets/lemur/fossa_predator.png',
+    useExternalFile: false,
+  },
+  {
+    key: 'logging_truck',
+    description:
+      'Heavy industrial flatbed timber truck carrying felled hardwood logs along clear-cut haul roads',
+    dimensions: '146x52 px single frame',
+    frames: 1,
+    filePath: '/assets/lemur/logging_truck.png',
+    useExternalFile: false,
+  },
+];

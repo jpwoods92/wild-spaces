@@ -43,7 +43,7 @@ const EPISODES: EpisodeCard[] = [
     status: 'ENDANGERED — >80% habitat fragmented',
     mechanicSummary:
       'Leap rapidly through safe treetops while active logging fells canopy bridges in real time, forcing desperate dashes across predator-patrolled ground.',
-    playable: false,
+    playable: true,
     accentColor: 0x34d399,
   },
 ];

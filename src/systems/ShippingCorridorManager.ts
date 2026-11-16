@@ -66,6 +66,7 @@ export interface ManagedShip {
   y: number;
   vx: number;
   pulseTimer: number;
+  wakeStyle: 'water' | 'dust' | 'none';
   sprite: Phaser.GameObjects.Image;
   wakeGraphics: Phaser.GameObjects.Graphics;
 }
@@ -77,6 +78,8 @@ export interface ShippingCorridorConfig {
   shipsPerLane: number;
   eastboundSpeed: number;
   westboundSpeed: number;
+  textureKey?: string;
+  wakeStyle?: 'water' | 'dust' | 'none';
   fillColor?: number;
   fillAlpha?: number;
   corridorDepth?: number;
@@ -129,6 +132,8 @@ export class ShippingCorridorManager {
       shipsPerLane,
       eastboundSpeed,
       westboundSpeed,
+      textureKey = 'industrial_ship',
+      wakeStyle = 'water',
       fillColor = 0x451a03,
       fillAlpha = 0.24,
       corridorDepth = 2,
@@ -211,7 +216,7 @@ export class ShippingCorridorManager {
 
           const wakeGraphics = this.scene.add.graphics().setDepth(wakeDepth);
           const sprite = this.scene.add
-            .image(startX, lane.y, 'industrial_ship')
+            .image(startX, lane.y, textureKey)
             .setDepth(shipDepth)
             .setFlipX(lane.vx < 0);
 
@@ -220,6 +225,7 @@ export class ShippingCorridorManager {
             y: lane.y,
             vx: lane.vx,
             pulseTimer: s * 0.9,
+            wakeStyle,
             sprite,
             wakeGraphics,
           });
@@ -265,34 +271,57 @@ export class ShippingCorridorManager {
         }
       }
 
-      // Render churning V-wake behind the vessel
+      // Render churning V-wake or dust plume behind the vessel/truck
       ship.wakeGraphics.clear();
-      const dir = ship.vx > 0 ? -1 : 1;
-      const sternX = ship.x + dir * 62;
+      if (ship.wakeStyle !== 'none') {
+        const dir = ship.vx > 0 ? -1 : 1;
+        const sternX = ship.x + dir * 62;
+        const wakePalette =
+          ship.wakeStyle === 'dust'
+            ? {
+                fillColor: 0xd97706,
+                fillAlpha: 0.18,
+                lineColor: 0xf59e0b,
+                lineAlpha: 0.32,
+              }
+            : {
+                fillColor: 0xbae6fd,
+                fillAlpha: 0.16,
+                lineColor: 0x94a3b8,
+                lineAlpha: 0.38,
+              };
 
-      ship.wakeGraphics.fillStyle(0xbae6fd, 0.16);
-      ship.wakeGraphics.fillTriangle(
-        sternX,
-        ship.y,
-        sternX + dir * 150,
-        ship.y - 28,
-        sternX + dir * 150,
-        ship.y + 28
-      );
+        ship.wakeGraphics.fillStyle(
+          wakePalette.fillColor,
+          wakePalette.fillAlpha
+        );
+        ship.wakeGraphics.fillTriangle(
+          sternX,
+          ship.y,
+          sternX + dir * 150,
+          ship.y - 28,
+          sternX + dir * 150,
+          ship.y + 28
+        );
 
-      ship.wakeGraphics.lineStyle(2, 0x94a3b8, 0.38);
-      ship.wakeGraphics.lineBetween(
-        sternX,
-        ship.y,
-        sternX + dir * 155,
-        ship.y - 34
-      );
-      ship.wakeGraphics.lineBetween(
-        sternX,
-        ship.y,
-        sternX + dir * 155,
-        ship.y + 34
-      );
+        ship.wakeGraphics.lineStyle(
+          2,
+          wakePalette.lineColor,
+          wakePalette.lineAlpha
+        );
+        ship.wakeGraphics.lineBetween(
+          sternX,
+          ship.y,
+          sternX + dir * 155,
+          ship.y - 34
+        );
+        ship.wakeGraphics.lineBetween(
+          sternX,
+          ship.y,
+          sternX + dir * 155,
+          ship.y + 34
+        );
+      }
 
       // Direct hull collision check
       if (

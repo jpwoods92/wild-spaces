@@ -1,5 +1,9 @@
 import Phaser from 'phaser';
-import { POLAR_BEAR_ASSETS, WHALE_ASSETS } from '../config/AssetManifest';
+import {
+  LEMUR_ASSETS,
+  POLAR_BEAR_ASSETS,
+  WHALE_ASSETS,
+} from '../config/AssetManifest';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -8,7 +12,11 @@ export class BootScene extends Phaser.Scene {
 
   preload(): void {
     // Load any external artist files that have been flipped to `useExternalFile: true`
-    for (const asset of [...POLAR_BEAR_ASSETS, ...WHALE_ASSETS]) {
+    for (const asset of [
+      ...POLAR_BEAR_ASSETS,
+      ...WHALE_ASSETS,
+      ...LEMUR_ASSETS,
+    ]) {
       if (asset.useExternalFile) {
         this.load.image(asset.key, asset.filePath);
       }
@@ -21,10 +29,11 @@ export class BootScene extends Phaser.Scene {
     this.generateSealTextures();
     this.generateEnvironmentTextures();
     this.generateWhaleTextures();
+    this.generateLemurTextures();
 
-    // Start on WhaleScene (Episode 2) directly so the user can test the new game right away,
-    // while keeping HubScene & Episode 1 one click away via "World Habitat Map".
-    this.scene.start('WhaleScene');
+    // Start on LemurScene (Episode 3) directly so the user can play the new episode right away,
+    // while keeping HubScene & Episodes 1-2 one click away via "World Habitat Map".
+    this.scene.start('LemurScene');
   }
 
   private generatePolarBearTextures(): void {
@@ -549,6 +558,232 @@ export class BootScene extends Phaser.Scene {
       g.lineStyle(1.5, 0x64748b, 0.45);
       g.strokeCircle(34, 34, 24);
       g.generateTexture('sonar_mystery', 68, 68);
+      g.destroy();
+    }
+  }
+
+  private generateLemurTextures(): void {
+    // 1. Adult Ring-Tailed Lemur walking/scampering (68x44 px, facing right / 0 rad)
+    if (!this.textures.exists('lemur_walk')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      const cy = 22;
+
+      // Iconic long black-and-white banded tail trailing left (x = 4..34)
+      for (let i = 0; i < 6; i++) {
+        const segX = 4 + i * 5;
+        g.fillStyle(i % 2 === 0 ? 0x0f172a : 0xf8fafc, 1);
+        g.fillRoundedRect(segX, cy - 2.6, 5.4, 5.2, 2);
+      }
+
+      // Shadow under body
+      g.fillStyle(0x020617, 0.32);
+      g.fillEllipse(44, cy + 2, 28, 18);
+
+      // Paws
+      g.fillStyle(0xcbd5e1, 1);
+      g.fillEllipse(37, cy - 8, 8, 4.5);
+      g.fillEllipse(37, cy + 8, 8, 4.5);
+      g.fillEllipse(51, cy - 7, 7, 4);
+      g.fillEllipse(51, cy + 7, 7, 4);
+
+      // Torso (warm grey-agouti back)
+      g.fillStyle(0x94a3b8, 1);
+      g.fillEllipse(44, cy, 24, 15);
+      g.fillStyle(0x64748b, 1);
+      g.fillEllipse(43, cy, 17, 10);
+
+      // Pale shoulders & white ears
+      g.fillStyle(0xe2e8f0, 1);
+      g.fillCircle(53, cy - 6.5, 3.2);
+      g.fillCircle(53, cy + 6.5, 3.2);
+
+      // Head with white cheeks and dark triangular eye masks
+      g.fillStyle(0xf8fafc, 1);
+      g.fillEllipse(58, cy, 13, 11);
+      g.fillStyle(0x0f172a, 1);
+      g.fillEllipse(59, cy - 3.2, 4.5, 3.2);
+      g.fillEllipse(59, cy + 3.2, 4.5, 3.2);
+      g.fillCircle(64.5, cy, 2); // black muzzle nose
+
+      g.generateTexture('lemur_walk', 68, 44);
+      g.destroy();
+    }
+
+    // 2. Ring-Tailed Lemur mid-leap (76x48 px, outstretched limbs)
+    if (!this.textures.exists('lemur_leap')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      const cy = 24;
+
+      // Streaming banded tail
+      for (let i = 0; i < 7; i++) {
+        const segX = 2 + i * 5;
+        g.fillStyle(i % 2 === 0 ? 0x0f172a : 0xf8fafc, 1);
+        g.fillRoundedRect(segX, cy - 2.4, 5.4, 4.8, 2);
+      }
+
+      // Outstretched hind & fore legs
+      g.fillStyle(0xe2e8f0, 1);
+      g.fillEllipse(35, cy - 11, 13, 4.5);
+      g.fillEllipse(35, cy + 11, 13, 4.5);
+      g.fillEllipse(60, cy - 10, 13, 4.5);
+      g.fillEllipse(60, cy + 10, 13, 4.5);
+
+      // Sleek elongated leaping torso
+      g.fillStyle(0x94a3b8, 1);
+      g.fillEllipse(48, cy, 28, 13);
+      g.fillStyle(0x64748b, 1);
+      g.fillEllipse(47, cy, 20, 8.5);
+
+      // Head
+      g.fillStyle(0xf8fafc, 1);
+      g.fillEllipse(64, cy, 13, 10.5);
+      g.fillStyle(0x0f172a, 1);
+      g.fillCircle(65, cy - 3, 2.2);
+      g.fillCircle(65, cy + 3, 2.2);
+      g.fillCircle(70.5, cy, 2);
+
+      g.generateTexture('lemur_leap', 76, 48);
+      g.destroy();
+    }
+
+    // 3. Waiting Troop Juvenile at Ancient Baobab Sanctuary (44x32 px)
+    if (!this.textures.exists('lemur_troop')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      const cy = 16;
+
+      for (let i = 0; i < 4; i++) {
+        g.fillStyle(i % 2 === 0 ? 0x0f172a : 0xf8fafc, 1);
+        g.fillRoundedRect(3 + i * 4.5, cy - 2, 4.8, 4, 1.5);
+      }
+      g.fillStyle(0x94a3b8, 1);
+      g.fillEllipse(26, cy, 16, 11);
+      g.fillStyle(0xf8fafc, 1);
+      g.fillCircle(35, cy, 6);
+      g.fillStyle(0x0f172a, 1);
+      g.fillCircle(36, cy - 2.2, 1.6);
+      g.fillCircle(36, cy + 2.2, 1.6);
+      g.fillCircle(40, cy, 1.5);
+
+      g.generateTexture('lemur_troop', 44, 32);
+      g.destroy();
+    }
+
+    // 4. Ripe Tamarind Pods & Fig Cluster (44x44 px)
+    if (!this.textures.exists('tamarind_fruit')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0xfbbf24, 0.22);
+      g.fillCircle(22, 22, 19);
+      g.fillStyle(0x16a34a, 0.45);
+      g.fillCircle(22, 22, 13);
+
+      // Golden-amber & warm brown tamarind pods
+      g.fillStyle(0xd97706, 1);
+      g.fillEllipse(18, 19, 13, 6.5);
+      g.fillEllipse(26, 25, 13, 6.5);
+      g.fillStyle(0xfbbf24, 1);
+      g.fillCircle(25, 16, 4.5);
+      g.fillCircle(17, 27, 4);
+      g.fillStyle(0xfef08a, 0.95);
+      g.fillCircle(26, 15, 1.8);
+
+      g.generateTexture('tamarind_fruit', 44, 44);
+      g.destroy();
+    }
+
+    // 5. Fossa Ground Ambush Predator (68x36 px, facing right / 0 rad)
+    if (!this.textures.exists('fossa_predator')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      const cy = 18;
+
+      // Shadow
+      g.fillStyle(0x020617, 0.35);
+      g.fillEllipse(34, cy + 2, 40, 18);
+
+      // Long muscular tail trailing left
+      g.fillStyle(0x7c2d12, 1);
+      g.fillRoundedRect(2, cy - 2.5, 24, 5, 2.5);
+
+      // Paws
+      g.fillStyle(0x9a3412, 1);
+      g.fillEllipse(27, cy - 8, 9, 4);
+      g.fillEllipse(27, cy + 8, 9, 4);
+      g.fillEllipse(46, cy - 8, 9, 4);
+      g.fillEllipse(46, cy + 8, 9, 4);
+
+      // Sleek reddish-brown predatory body
+      g.fillStyle(0x9a3412, 1);
+      g.fillEllipse(37, cy, 30, 15);
+      g.fillStyle(0xb45309, 0.85);
+      g.fillEllipse(39, cy, 22, 10);
+
+      // Ears & predatory snout
+      g.fillStyle(0x7c2d12, 1);
+      g.fillCircle(51, cy - 6, 3);
+      g.fillCircle(51, cy + 6, 3);
+      g.fillStyle(0x9a3412, 1);
+      g.fillEllipse(56, cy, 14, 10);
+
+      // Amber predator eyes & dark nose
+      g.fillStyle(0xfbbf24, 1);
+      g.fillCircle(57, cy - 2.8, 1.7);
+      g.fillCircle(57, cy + 2.8, 1.7);
+      g.fillStyle(0x0f172a, 1);
+      g.fillCircle(63, cy, 2);
+
+      g.generateTexture('fossa_predator', 68, 36);
+      g.destroy();
+    }
+
+    // 6. Industrial Logging Timber Truck (146x52 px, facing right / 0 rad)
+    if (!this.textures.exists('logging_truck')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+
+      // Ground shadow
+      g.fillStyle(0x020617, 0.45);
+      g.fillRoundedRect(4, 8, 138, 40, 8);
+
+      // Tires
+      g.fillStyle(0x0f172a, 1);
+      for (const wx of [18, 40, 84, 122]) {
+        g.fillRoundedRect(wx, 2, 14, 6, 2);
+        g.fillRoundedRect(wx, 44, 14, 6, 2);
+      }
+
+      // Steel flatbed trailer (left/rear)
+      g.fillStyle(0x334155, 1);
+      g.fillRoundedRect(4, 6, 98, 40, 4);
+
+      // Stacked felled hardwood logs on trailer
+      g.fillStyle(0x78350f, 1);
+      g.fillRoundedRect(8, 9, 90, 10, 3);
+      g.fillRoundedRect(8, 21, 90, 10, 3);
+      g.fillRoundedRect(8, 33, 90, 10, 3);
+      g.fillStyle(0x92400e, 1);
+      g.fillRoundedRect(10, 11, 86, 6, 2);
+      g.fillRoundedRect(10, 23, 86, 6, 2);
+      g.fillRoundedRect(10, 35, 86, 6, 2);
+
+      // Heavy industrial yellow cab (right/front)
+      g.fillStyle(0xd97706, 1);
+      g.fillRoundedRect(104, 7, 36, 38, 6);
+      // Windshield
+      g.fillStyle(0x0f172a, 1);
+      g.fillRoundedRect(126, 11, 10, 30, 3);
+      // Headlight beam cones
+      g.fillStyle(0xfef08a, 0.85);
+      g.fillRect(139, 11, 4, 6);
+      g.fillRect(139, 35, 4, 6);
+
+      g.generateTexture('logging_truck', 146, 52);
+      g.destroy();
+    }
+
+    // 7. Canopy Leaf Drift Particle (8x8 px)
+    if (!this.textures.exists('leaf_dot')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0x4ade80, 0.85);
+      g.fillEllipse(4, 4, 7, 4);
+      g.generateTexture('leaf_dot', 8, 8);
       g.destroy();
     }
   }
