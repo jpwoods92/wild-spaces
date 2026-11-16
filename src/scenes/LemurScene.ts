@@ -8,6 +8,10 @@ import {
   saveActiveSession,
 } from '../utils/SessionStore';
 import { shouldSpawnFoodAtNode } from '../utils/FoodScarcitySchedule';
+import {
+  CircleObstacle,
+  resolveCircleObstacleMovement,
+} from '../utils/ObstacleAvoidance';
 import { ShippingCorridorManager } from '../systems/ShippingCorridorManager';
 import {
   EpisodeUIManager,
@@ -18,12 +22,14 @@ import { globalPauseManager } from '../systems/PauseManager';
 interface CanopyTree {
   id: number;
   container: Phaser.GameObjects.Container;
+  trunkGraphics: Phaser.GameObjects.Graphics;
   shadowGraphics: Phaser.GameObjects.Graphics;
   canopyGraphics: Phaser.GameObjects.Graphics;
   points: Phaser.Math.Vector2[];
   baseX: number;
   baseY: number;
   baseRadius: number;
+  trunkRadius: number;
   swayPhase: number;
   isSanctuary?: boolean;
   scorched: boolean;
@@ -524,7 +530,35 @@ export class LemurScene extends Phaser.Scene {
     radius: number,
     isSanctuary = false
   ): CanopyTree {
-    const container = this.add.container(x, y).setDepth(6);
+    const trunkRadius = isSanctuary ? 58 : Math.round(radius * 0.42);
+
+    // Forest-floor sturdy wooden trunk & buttress roots (depth 4, below Fossa predators at depth 5)
+    const trunkGraphics = this.add.graphics({ x, y }).setDepth(4);
+    trunkGraphics.fillStyle(0x090502, 0.34);
+    trunkGraphics.fillCircle(4, 6, trunkRadius + 4);
+    trunkGraphics.fillStyle(0x451a03, 1);
+    for (let r = 0; r < 5; r++) {
+      const ra = (r / 5) * Math.PI * 2 + 0.3;
+      trunkGraphics.fillEllipse(
+        Math.cos(ra) * (trunkRadius * 0.72),
+        Math.sin(ra) * (trunkRadius * 0.72),
+        trunkRadius * 0.85,
+        trunkRadius * 0.45
+      );
+    }
+    trunkGraphics.fillStyle(0x78350f, 1);
+    trunkGraphics.lineStyle(2.5, 0x451a03, 0.95);
+    trunkGraphics.fillCircle(0, 0, trunkRadius);
+    trunkGraphics.strokeCircle(0, 0, trunkRadius);
+    trunkGraphics.fillStyle(0x92400e, 0.78);
+    trunkGraphics.fillCircle(
+      -trunkRadius * 0.15,
+      -trunkRadius * 0.15,
+      trunkRadius * 0.52
+    );
+
+    // Overhead canopy crown (depth 8, above ground predators)
+    const container = this.add.container(x, y).setDepth(8);
     const shadowGraphics = this.add.graphics();
     const canopyGraphics = this.add.graphics();
 
@@ -542,7 +576,7 @@ export class LemurScene extends Phaser.Scene {
     }
 
     // Forest-floor canopy shadow
-    shadowGraphics.fillStyle(0x090502, 0.36);
+    shadowGraphics.fillStyle(0x090502, 0.28);
     shadowGraphics.beginPath();
     points.forEach((pt, idx) => {
       const sx = pt.x * 1.04 + 10;
@@ -553,12 +587,8 @@ export class LemurScene extends Phaser.Scene {
     shadowGraphics.closePath();
     shadowGraphics.fillPath();
 
-    // Trunk visible underneath boughs
-    canopyGraphics.fillStyle(0x78350f, 0.95);
-    canopyGraphics.fillCircle(0, 4, isSanctuary ? 38 : 16);
-
-    // Rich Spiny-Forest Emerald Crown
-    canopyGraphics.fillStyle(isSanctuary ? 0x15803d : 0x166534, 0.96);
+    // Rich Spiny-Forest Emerald Crown (slightly translucent so trunk & predators beneath remain legible)
+    canopyGraphics.fillStyle(isSanctuary ? 0x15803d : 0x166534, 0.84);
     canopyGraphics.lineStyle(3, 0x22c55e, 0.65);
     canopyGraphics.beginPath();
     points.forEach((pt, idx) => {
@@ -570,7 +600,7 @@ export class LemurScene extends Phaser.Scene {
     canopyGraphics.strokePath();
 
     // Sunlit inner foliage crown layer
-    canopyGraphics.fillStyle(isSanctuary ? 0x22c55e : 0x16a34a, 0.78);
+    canopyGraphics.fillStyle(isSanctuary ? 0x22c55e : 0x16a34a, 0.7);
     canopyGraphics.beginPath();
     points.forEach((pt, idx) => {
       if (idx === 0) canopyGraphics.moveTo(pt.x * 0.72, pt.y * 0.72 - 4);
@@ -580,7 +610,7 @@ export class LemurScene extends Phaser.Scene {
     canopyGraphics.fillPath();
 
     // Highlighted top leaves
-    canopyGraphics.fillStyle(0x4ade80, 0.42);
+    canopyGraphics.fillStyle(0x4ade80, 0.36);
     canopyGraphics.fillCircle(-radius * 0.16, -radius * 0.14, radius * 0.28);
 
     container.add([shadowGraphics, canopyGraphics]);
@@ -588,12 +618,14 @@ export class LemurScene extends Phaser.Scene {
     const tree: CanopyTree = {
       id,
       container,
+      trunkGraphics,
       shadowGraphics,
       canopyGraphics,
       points,
       baseX: x,
       baseY: y,
       baseRadius: radius,
+      trunkRadius,
       swayPhase: Phaser.Math.FloatBetween(0, Math.PI * 2),
       isSanctuary,
       scorched: false,
@@ -749,15 +781,24 @@ export class LemurScene extends Phaser.Scene {
         patrolY = nearRoad + (patrolY >= nearRoad ? 215 : -215);
       }
 
-      const startX = Phaser.Math.Between(
-        this.WORLD_WIDTH / 2 - 380,
-        this.WORLD_WIDTH / 2 + 380
+      const initialPos = resolveCircleObstacleMovement(
+        Phaser.Math.Between(
+          this.WORLD_WIDTH / 2 - 380,
+          this.WORLD_WIDTH / 2 + 380
+        ),
+        patrolY,
+        0,
+        0,
+        0,
+        this.getTrunkObstacles()
       );
+      const startX = initialPos.x;
+      patrolY = initialPos.y;
       const dir = i % 2 === 0 ? 1 : -1;
 
       const sprite = this.add
         .image(startX, patrolY, 'fossa_predator')
-        .setDepth(16)
+        .setDepth(5)
         .setRotation(dir > 0 ? 0 : Math.PI);
 
       const alertText = this.add
@@ -783,6 +824,14 @@ export class LemurScene extends Phaser.Scene {
         isChasing: false,
       });
     }
+  }
+
+  private getTrunkObstacles(): CircleObstacle[] {
+    return this.trees.map((tree) => ({
+      x: tree.baseX,
+      y: tree.baseY,
+      radius: tree.trunkRadius + 24,
+    }));
   }
 
   private getTreeEllipticalRadii(tree: CanopyTree): { rx: number; ry: number } {
@@ -1500,6 +1549,8 @@ export class LemurScene extends Phaser.Scene {
   }
 
   private updateFossas(dt: number): void {
+    const trunkObstacles = this.getTrunkObstacles();
+
     for (const fossa of this.fossas) {
       if (fossa.attackCooldown > 0) {
         fossa.attackCooldown = Math.max(0, fossa.attackCooldown - dt);
@@ -1512,6 +1563,9 @@ export class LemurScene extends Phaser.Scene {
         this.lemurY
       );
 
+      let desiredVx = 0;
+      let desiredVy = 0;
+
       // Chase only when the lemur touches down on the exposed forest floor nearby
       if (distToLemur < 230 && !this.isInCanopy && !this.isLeaping) {
         fossa.isChasing = true;
@@ -1521,23 +1575,34 @@ export class LemurScene extends Phaser.Scene {
           this.lemurX,
           this.lemurY
         );
-        fossa.sprite.x += Math.cos(angle) * fossa.chaseSpeed * dt;
-        fossa.sprite.y = Phaser.Math.Clamp(
-          fossa.sprite.y + Math.sin(angle) * fossa.chaseSpeed * dt,
-          this.SANCTUARY_Y + 95,
-          this.worldHeight - 80
-        );
-        fossa.sprite.setRotation(angle);
+        desiredVx = Math.cos(angle) * fossa.chaseSpeed;
+        desiredVy = Math.sin(angle) * fossa.chaseSpeed;
         fossa.alertText.setText('!');
       } else {
         fossa.isChasing = false;
-        fossa.sprite.x += fossa.vx * dt;
-        fossa.sprite.y = Phaser.Math.Linear(
-          fossa.sprite.y,
-          fossa.patrolY,
-          1.8 * dt
-        );
+        desiredVx = fossa.vx;
+        desiredVy = (fossa.patrolY - fossa.sprite.y) * 1.8;
+        fossa.alertText.setText(distToLemur < 230 ? '?' : '');
+      }
 
+      // Steer around tree trunks so Fossas never clip through bark
+      const steered = resolveCircleObstacleMovement(
+        fossa.sprite.x,
+        fossa.sprite.y,
+        desiredVx,
+        desiredVy,
+        dt,
+        trunkObstacles
+      );
+
+      fossa.sprite.x = steered.x;
+      fossa.sprite.y = Phaser.Math.Clamp(
+        steered.y,
+        this.SANCTUARY_Y + 95,
+        this.worldHeight - 80
+      );
+
+      if (!fossa.isChasing) {
         if (fossa.sprite.x < fossa.minX) {
           fossa.sprite.x = fossa.minX;
           fossa.vx = Math.abs(fossa.vx);
@@ -1545,15 +1610,27 @@ export class LemurScene extends Phaser.Scene {
           fossa.sprite.x = fossa.maxX;
           fossa.vx = -Math.abs(fossa.vx);
         }
-        fossa.sprite.setRotation(fossa.vx >= 0 ? 0 : Math.PI);
-        fossa.alertText.setText(distToLemur < 230 ? '?' : '');
+      }
+
+      if (Math.hypot(steered.actualVx, steered.actualVy) > 1e-2) {
+        fossa.sprite.setRotation(
+          Math.atan2(steered.actualVy, steered.actualVx)
+        );
       }
 
       fossa.alertText.setPosition(fossa.sprite.x, fossa.sprite.y - 26);
 
+      // Recompute post-step distance after trunk avoidance before evaluating bite
+      const finalDistToLemur = Phaser.Math.Distance.Between(
+        fossa.sprite.x,
+        fossa.sprite.y,
+        this.lemurX,
+        this.lemurY
+      );
+
       // Ambush bite if catching an exposed lemur on the ground (mid-air Canopy Leap clears Fossa)
       if (
-        distToLemur < 42 &&
+        finalDistToLemur < 42 &&
         !this.isInCanopy &&
         !this.isLeaping &&
         fossa.attackCooldown <= 0
