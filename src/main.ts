@@ -100,7 +100,7 @@ const winState = window as unknown as {
   }) => void;
   showLemurImpactModal: (payload: {
     won: boolean;
-    deathReason?: 'exhaustion' | 'truck';
+    deathReason?: 'exhaustion' | 'truck' | 'fire';
     level: number;
     levelTargetMeters: number;
     metersInLevel: number;
@@ -108,7 +108,7 @@ const winState = window as unknown as {
     nextLevelMeters: number;
     groundMeters: number;
     fruitCollected: number;
-    treesFelled: number;
+    bestCanopyCombo: number;
     levelTimeSeconds: number;
     totalTimeSeconds: number;
     nextLevelData: LemurSceneData;
@@ -439,23 +439,29 @@ winState.showLemurImpactModal = (payload) => {
     won: payload.won,
     tagText: payload.won
       ? `Episode 3 • Level ${payload.level} Complete`
+      : payload.deathReason === 'fire'
+      ? `Slash-and-Burn Fire • Level ${payload.level}`
       : payload.deathReason === 'truck'
       ? `Haul Road Impact • Level ${payload.level}`
       : `Exhausted in Deforested Gap • Level ${payload.level}`,
     titleText: payload.won
       ? 'Reached the Ancient Baobab Sanctuary'
+      : payload.deathReason === 'fire'
+      ? 'Overtaken by the Slash-and-Burn Front'
       : payload.deathReason === 'truck'
       ? 'Struck on an Illegal Logging Haul Road'
       : 'Overwhelmed on the Fractured Forest Floor',
     summaryText: payload.won
-      ? `Leaping across logging clearings, you guided your lemur ${payload.levelTargetMeters}m in ${formatDuration(
+      ? `Leaping from crown to crown ahead of the brushfire, you guided your lemur ${payload.levelTargetMeters}m in ${formatDuration(
           payload.levelTimeSeconds
-        )} back to the baobab sanctuary (${payload.treesFelled} trees felled behind you). Continue into Level ${
+        )} to the baobab sanctuary (best canopy chain: ×${payload.bestCanopyCombo}). Continue into Level ${
           payload.level + 1
-        } (${payload.nextLevelMeters}m) where clear-cut gaps widen and fossa patrols intensify!`
+        } (${payload.nextLevelMeters}m) where clear-cut gaps widen and the fire wall advances faster!`
+      : payload.deathReason === 'fire'
+      ? `Traditional "tavy" slash-and-burn clearing turns fragmented forest patches into fast-moving walls of flame and blinding smoke, leaving wildlife trapped between wide clearings (${payload.totalMetersMigrated}m total progress).`
       : payload.deathReason === 'truck'
       ? `Clear-cut logging roads carve straight through Madagascar's spiny forest, turning vital canopy crossings into fatal ground dashes (${payload.totalMetersMigrated}m total progress).`
-      : `You traveled ${payload.metersInLevel}m / ${payload.levelTargetMeters}m on Level ${payload.level} (${payload.totalMetersMigrated}m total) before heat exposure and fossa ambushes exhausted your stamina.`,
+      : `You traveled ${payload.metersInLevel}m / ${payload.levelTargetMeters}m on Level ${payload.level} (${payload.totalMetersMigrated}m total) before heat exposure, smoke, and fossa ambushes exhausted your stamina.`,
     nextButtonLabel: `Continue Through Canopy (Level ${payload.level + 1} • ${payload.nextLevelMeters}m →)`,
     nextLevelData: payload.nextLevelData,
     totalMetersMigrated: payload.totalMetersMigrated,

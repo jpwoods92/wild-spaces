@@ -42,7 +42,7 @@ const EPISODES: EpisodeCard[] = [
     species: 'Ring-Tailed Lemur (Lemur catta)',
     status: 'ENDANGERED — >80% habitat fragmented',
     mechanicSummary:
-      'Leap rapidly through safe treetops while active logging fells canopy bridges in real time, forcing desperate dashes across predator-patrolled ground.',
+      'Hold SPACE to aim and charge long canopy leaps from crown to crown while an advancing slash-and-burn fire wall sweeps northward behind you.',
     playable: true,
     accentColor: 0x34d399,
   },
