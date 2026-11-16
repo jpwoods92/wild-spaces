@@ -45,6 +45,9 @@ function createMockShippingScene(viewportWidth = 1440, scrollX = 6880) {
         fillTriangle() {
           return this;
         },
+        fillCircle() {
+          return this;
+        },
         destroy() {},
       }),
       text: () => ({

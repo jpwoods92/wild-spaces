@@ -645,7 +645,7 @@ export class LemurScene extends Phaser.Scene {
       eastboundSpeed: 185 + speedBoost,
       westboundSpeed: 205 + speedBoost,
       textureKey: 'logging_truck',
-      wakeStyle: 'none',
+      wakeStyle: 'dust',
       fillColor: 0x78350f,
       fillAlpha: 0.34,
       corridorDepth: 2,
@@ -1579,6 +1579,12 @@ export class LemurScene extends Phaser.Scene {
       checkCollision: !this.isLeaping,
       hitHalfWidth: 74,
       hitHalfHeight: 28,
+      onWakeOverlap: (truckVx, stepDt) => {
+        if (!this.isInCanopy && !this.isLeaping) {
+          this.lemurX += truckVx * stepDt * 0.75;
+          this.stamina = Math.max(0, this.stamina - 14 * stepDt);
+        }
+      },
     });
 
     if (struck) {

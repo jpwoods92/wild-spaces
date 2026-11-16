@@ -273,30 +273,33 @@ export class ShippingCorridorManager {
         }
       }
 
-      // Render churning V-wake or dust plume behind the vessel/truck
+      // Render churning V-wake or billowing road dust plume behind the vessel/truck
       ship.wakeGraphics.clear();
-      if (ship.wakeStyle !== 'none') {
+      if (ship.wakeStyle === 'dust') {
+        const dir = ship.vx > 0 ? -1 : 1;
+        const rearX = ship.x + dir * 64;
+        const puffs = [
+          { dx: 18, dy: -6, r: 16, color: 0xd97706, alpha: 0.24 },
+          { dx: 24, dy: 7, r: 15, color: 0xb45309, alpha: 0.22 },
+          { dx: 52, dy: -12, r: 22, color: 0xd97706, alpha: 0.18 },
+          { dx: 58, dy: 11, r: 21, color: 0xf59e0b, alpha: 0.16 },
+          { dx: 92, dy: -16, r: 28, color: 0xd97706, alpha: 0.12 },
+          { dx: 98, dy: 15, r: 27, color: 0xb45309, alpha: 0.11 },
+          { dx: 134, dy: 0, r: 32, color: 0xf59e0b, alpha: 0.08 },
+        ];
+        for (const puff of puffs) {
+          ship.wakeGraphics.fillStyle(puff.color, puff.alpha);
+          ship.wakeGraphics.fillCircle(
+            rearX + dir * puff.dx,
+            ship.y + puff.dy,
+            puff.r
+          );
+        }
+      } else if (ship.wakeStyle === 'water') {
         const dir = ship.vx > 0 ? -1 : 1;
         const sternX = ship.x + dir * 62;
-        const wakePalette =
-          ship.wakeStyle === 'dust'
-            ? {
-                fillColor: 0xd97706,
-                fillAlpha: 0.18,
-                lineColor: 0xf59e0b,
-                lineAlpha: 0.32,
-              }
-            : {
-                fillColor: 0xbae6fd,
-                fillAlpha: 0.16,
-                lineColor: 0x94a3b8,
-                lineAlpha: 0.38,
-              };
 
-        ship.wakeGraphics.fillStyle(
-          wakePalette.fillColor,
-          wakePalette.fillAlpha
-        );
+        ship.wakeGraphics.fillStyle(0xbae6fd, 0.16);
         ship.wakeGraphics.fillTriangle(
           sternX,
           ship.y,
@@ -306,11 +309,7 @@ export class ShippingCorridorManager {
           ship.y + 28
         );
 
-        ship.wakeGraphics.lineStyle(
-          2,
-          wakePalette.lineColor,
-          wakePalette.lineAlpha
-        );
+        ship.wakeGraphics.lineStyle(2, 0x94a3b8, 0.38);
         ship.wakeGraphics.lineBetween(
           sternX,
           ship.y,
