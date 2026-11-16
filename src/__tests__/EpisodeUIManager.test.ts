@@ -36,12 +36,14 @@ interface MockText {
   y: number;
   text: string;
   color: string;
+  visible: boolean;
   destroyed: boolean;
   width: number;
   active: boolean;
   setText(val: string): MockText;
   setPosition(x: number, y: number): MockText;
   setColor(c: string): MockText;
+  setVisible(v: boolean): MockText;
   setOrigin(): MockText;
   setScrollFactor(): MockText;
   setDepth(): MockText;
@@ -120,6 +122,7 @@ function createMockScene(width = 1280, height = 720) {
           y,
           text: initialText,
           color: '',
+          visible: true,
           destroyed: false,
           active: true,
           get width() {
@@ -136,6 +139,10 @@ function createMockScene(width = 1280, height = 720) {
           },
           setColor(c: string) {
             this.color = c;
+            return this;
+          },
+          setVisible(v: boolean) {
+            this.visible = v;
             return this;
           },
           setOrigin() {
@@ -261,9 +268,21 @@ describe('EpisodeUIManager & shared stamina math helpers', () => {
       // Depleted maxStamina ceiling draws a locked rect on the right side
       assert.equal(worldGraphics.rects.length, 1);
 
-      // Tag text floats above the secondary bar
+      // Tag text floats above the secondary bar and toggles visibility cleanly
       assert.equal(worldTag.text, 'SONAR DISRUPTED • 2.1s');
+      assert.equal(worldTag.visible, true);
       assert.ok(worldTag.y < secondaryBackdrop.y);
+
+      // Clearing secondary bar hides the tag background box so no stray square stays behind
+      ui.renderWorldBars({
+        x: 520,
+        y: 620,
+        stamina: 45,
+        maxStamina: 75,
+        primaryFillColor: 0x38bdf8,
+      });
+      assert.equal(worldTag.text, '');
+      assert.equal(worldTag.visible, false);
     });
 
     it('spawns floating notice and destroys it when tween completes', () => {

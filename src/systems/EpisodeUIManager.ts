@@ -148,7 +148,8 @@ export class EpisodeUIManager {
         padding: { x: 6, y: 2 },
       })
       .setOrigin(0.5, 1)
-      .setDepth(46);
+      .setDepth(46)
+      .setVisible(false);
   }
 
   public redrawViewportBg(fillColor = 0x040d17): void {
@@ -298,8 +299,10 @@ export class EpisodeUIManager {
       this.worldUiTagText.setPosition(state.x, topBarY - 8);
       this.worldUiTagText.setColor(state.secondaryBar.tagColor);
       this.worldUiTagText.setText(state.secondaryBar.tagText);
+      this.worldUiTagText.setVisible(true);
     } else {
       this.worldUiTagText.setText('');
+      this.worldUiTagText.setVisible(false);
     }
   }
 
