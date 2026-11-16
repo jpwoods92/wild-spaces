@@ -49,6 +49,26 @@ interface FossaPredator {
   isChasing: boolean;
 }
 
+interface RivalLemur {
+  id: number;
+  sprite: Phaser.GameObjects.Image;
+  tagText: Phaser.GameObjects.Text;
+  ringGraphics: Phaser.GameObjects.Graphics;
+  x: number;
+  y: number;
+  currentTree: CanopyTree | null;
+  targetTree: CanopyTree | null;
+  hopTimer: number;
+  isLeaping: boolean;
+  leapElapsed: number;
+  leapDuration: number;
+  startX: number;
+  startY: number;
+  destX: number;
+  destY: number;
+  active: boolean;
+}
+
 export interface LemurSceneData {
   level?: number;
   carryMaxStamina?: number;
@@ -100,6 +120,7 @@ export class LemurScene extends Phaser.Scene {
   private leapTargetY = 3920;
   private leapOriginTreeId: number | null = null;
   private aimLandTree: CanopyTree | null = null;
+  private aimTreeOccupied = false;
   private aimTargetX = 1200;
   private aimTargetY = 3920;
   private canopyCombo = 0;
@@ -119,6 +140,7 @@ export class LemurScene extends Phaser.Scene {
   private trees: CanopyTree[] = [];
   private fruits: TamarindFruit[] = [];
   private fossas: FossaPredator[] = [];
+  private rivalLemurs: RivalLemur[] = [];
 
   // Run telemetry
   private cumulativeMetersBeforeLevel = 0;
@@ -190,7 +212,10 @@ export class LemurScene extends Phaser.Scene {
     // 2. Generate Permanent Canopy Crowns & Ancient Baobab Sanctuary
     this.generateCanopyRoute();
 
-    // 3. Spawn Active Clear-Cut Logging Haul Roads via Shared ShippingCorridorManager
+    // 3. Spawn Escaping Rival Lemurs on Level 2+
+    this.spawnRivalLemurs();
+
+    // 4. Spawn Active Clear-Cut Logging Haul Roads via Shared ShippingCorridorManager
     this.spawnLoggingHaulRoads();
 
     // 4. Spawn Ground Ambush Fossa Predators in clearings
@@ -295,6 +320,7 @@ export class LemurScene extends Phaser.Scene {
     this.leapElapsed = 0;
     this.leapOriginTreeId = null;
     this.aimLandTree = null;
+    this.aimTreeOccupied = false;
     this.aimTargetX = this.lemurX;
     this.aimTargetY = this.lemurY;
     this.canopyCombo = 0;
@@ -310,6 +336,7 @@ export class LemurScene extends Phaser.Scene {
     this.trees = [];
     this.fruits = [];
     this.fossas = [];
+    this.rivalLemurs = [];
     this.gameEnded = false;
 
     const totalRoutePx = this.startY - this.SANCTUARY_Y;
@@ -618,13 +645,88 @@ export class LemurScene extends Phaser.Scene {
       eastboundSpeed: 185 + speedBoost,
       westboundSpeed: 205 + speedBoost,
       textureKey: 'logging_truck',
-      wakeStyle: 'dust',
+      wakeStyle: 'none',
       fillColor: 0x78350f,
       fillAlpha: 0.34,
       corridorDepth: 2,
       wakeDepth: 13,
       shipDepth: 14,
     });
+  }
+
+  private spawnRivalLemurs(): void {
+    if (this.level < 2) return;
+
+    const rivalCount = Math.min(10, 2 + (this.level - 2) * 2);
+    const eligibleTrees = this.trees
+      .filter((t) => !t.isSanctuary && t.id !== 1)
+      .sort((a, b) => b.baseY - a.baseY);
+
+    if (eligibleTrees.length === 0) return;
+
+    for (let i = 0; i < rivalCount; i++) {
+      const idx = Math.min(
+        eligibleTrees.length - 1,
+        Math.floor(((i + 0.5) / rivalCount) * eligibleTrees.length)
+      );
+      const startTree = eligibleTrees[idx];
+      // Avoid placing two rivals on the exact same tree
+      if (this.isTreeOccupiedByRival(startTree)) continue;
+
+      const rx = startTree.baseX + Phaser.Math.Between(-14, 14);
+      const ry = startTree.baseY + Phaser.Math.Between(-14, 14);
+
+      const sprite = this.add
+        .image(rx, ry, 'lemur_walk')
+        .setDepth(19)
+        .setTint(0xfde68a)
+        .setRotation(-Math.PI / 2);
+
+      const ringGraphics = this.add.graphics().setDepth(14);
+      const tagText = this.add
+        .text(rx, ry - 26, 'OCCUPIED', {
+          fontSize: '10px',
+          fontStyle: 'bold',
+          color: '#fbbf24',
+          stroke: '#041019',
+          strokeThickness: 3,
+        })
+        .setOrigin(0.5)
+        .setDepth(27);
+
+      this.rivalLemurs.push({
+        id: i + 1,
+        sprite,
+        tagText,
+        ringGraphics,
+        x: rx,
+        y: ry,
+        currentTree: startTree,
+        targetTree: null,
+        hopTimer: Phaser.Math.FloatBetween(1.6, 3.8),
+        isLeaping: false,
+        leapElapsed: 0,
+        leapDuration: 0.42,
+        startX: rx,
+        startY: ry,
+        destX: rx,
+        destY: ry,
+        active: true,
+      });
+    }
+  }
+
+  private isTreeOccupiedByRival(
+    tree: CanopyTree,
+    excludeRivalId?: number
+  ): boolean {
+    if (tree.isSanctuary) return false;
+    return this.rivalLemurs.some(
+      (r) =>
+        r.active &&
+        r.id !== excludeRivalId &&
+        (r.currentTree?.id === tree.id || r.targetTree?.id === tree.id)
+    );
   }
 
   private spawnFossaPredators(): void {
@@ -722,8 +824,9 @@ export class LemurScene extends Phaser.Scene {
     // 4. Update Survival Meters (Stamina recovery in canopy / ground & fire heat burn)
     this.updateSurvivalMeters(dt);
 
-    // 5. Update Tamarind Fruit Foraging & Fossa Ground Predators
+    // 5. Update Tamarind Fruit Foraging, Rival Lemurs & Fossa Ground Predators
     this.updateFruits();
+    this.updateRivalLemurs(dt);
     this.updateFossas(dt);
 
     // 6. Update Logging Haul Road Trucks via Shared ShippingCorridorManager
@@ -801,8 +904,10 @@ export class LemurScene extends Phaser.Scene {
 
   private checkCanopySupport(): void {
     const foundTree = this.findTreeAt(this.lemurX, this.lemurY);
-    this.currentTree = foundTree;
-    this.isInCanopy = foundTree !== null;
+    const usableTree =
+      foundTree && !this.isTreeOccupiedByRival(foundTree) ? foundTree : null;
+    this.currentTree = usableTree;
+    this.isInCanopy = usableTree !== null;
   }
 
   private updateLemurMovement(dt: number): void {
@@ -838,29 +943,62 @@ export class LemurScene extends Phaser.Scene {
         this.lemur.setPosition(this.lemurX, this.lemurY);
         this.leapShadowGraphics.clear();
 
-        this.checkCanopySupport();
-        if (
-          this.isInCanopy &&
-          this.currentTree &&
-          this.currentTree.id !== this.leapOriginTreeId
-        ) {
-          this.canopyCombo++;
-          this.bestCanopyCombo = Math.max(
-            this.bestCanopyCombo,
-            this.canopyCombo
-          );
-          this.stamina = Math.min(this.maxStamina, this.stamina + 6);
-          if (this.canopyCombo >= 2) {
-            this.uiManager.spawnFloatingNotice(
-              this.lemurX,
-              this.lemurY - 36,
-              `CANOPY COMBO ×${this.canopyCombo} (+STAMINA)`,
-              '#34d399'
-            );
+        const hitTree = this.findTreeAt(this.lemurX, this.lemurY);
+        if (hitTree && this.isTreeOccupiedByRival(hitTree)) {
+          // Occupied non-sanctuary tree cannot be landed on -> bounce off rim onto ground
+          const cx = hitTree.container.x;
+          const cy = hitTree.container.y;
+          const { rx, ry } = this.getTreeEllipticalRadii(hitTree);
+          let pushAngle = Math.atan2(this.lemurY - cy, this.lemurX - cx);
+          if (Math.hypot(this.lemurX - cx, this.lemurY - cy) < 4) {
+            pushAngle = this.lemurAngle + Math.PI;
           }
-        } else if (!this.isInCanopy) {
+          this.lemurX = Phaser.Math.Clamp(
+            cx + Math.cos(pushAngle) * rx * 1.08,
+            45,
+            this.WORLD_WIDTH - 45
+          );
+          this.lemurY = Phaser.Math.Clamp(
+            cy + Math.sin(pushAngle) * ry * 1.08,
+            180,
+            this.worldHeight - 60
+          );
+          this.lemur.setPosition(this.lemurX, this.lemurY);
+          this.currentTree = null;
+          this.isInCanopy = false;
           this.canopyCombo = 0;
-          this.spawnGroundDustPuff(this.lemurX, this.lemurY, 1.15);
+          this.cameras.main.shake(180, 0.008);
+          this.uiManager.spawnFloatingNotice(
+            this.lemurX,
+            this.lemurY - 36,
+            'TREE OCCUPIED! BOUNCED TO GROUND!',
+            '#ef4444'
+          );
+        } else {
+          this.checkCanopySupport();
+          if (
+            this.isInCanopy &&
+            this.currentTree &&
+            this.currentTree.id !== this.leapOriginTreeId
+          ) {
+            this.canopyCombo++;
+            this.bestCanopyCombo = Math.max(
+              this.bestCanopyCombo,
+              this.canopyCombo
+            );
+            this.stamina = Math.min(this.maxStamina, this.stamina + 6);
+            if (this.canopyCombo >= 2) {
+              this.uiManager.spawnFloatingNotice(
+                this.lemurX,
+                this.lemurY - 36,
+                `CANOPY COMBO ×${this.canopyCombo} (+STAMINA)`,
+                '#34d399'
+              );
+            }
+          } else if (!this.isInCanopy) {
+            this.canopyCombo = 0;
+            this.spawnGroundDustPuff(this.lemurX, this.lemurY, 1.15);
+          }
         }
       }
       return;
@@ -932,7 +1070,10 @@ export class LemurScene extends Phaser.Scene {
         180,
         this.worldHeight - 60
       );
-      this.aimLandTree = this.findTreeAt(this.aimTargetX, this.aimTargetY);
+      const rawTree = this.findTreeAt(this.aimTargetX, this.aimTargetY);
+      this.aimTreeOccupied =
+        rawTree !== null && this.isTreeOccupiedByRival(rawTree);
+      this.aimLandTree = this.aimTreeOccupied ? null : rawTree;
 
       this.lemurVx = 0;
       this.lemurVy = 0;
@@ -958,6 +1099,7 @@ export class LemurScene extends Phaser.Scene {
       this.leapTargetY = this.aimTargetY;
       this.leapOriginTreeId = this.currentTree?.id ?? null;
       this.aimLandTree = null;
+      this.aimTreeOccupied = false;
       return;
     }
 
@@ -1109,7 +1251,11 @@ export class LemurScene extends Phaser.Scene {
     if (!this.isChargingLeap || this.isLeaping) return;
 
     const isTreeTarget = this.aimLandTree !== null;
-    const reticleColor = isTreeTarget ? 0x34d399 : 0xf59e0b;
+    const reticleColor = this.aimTreeOccupied
+      ? 0xef4444
+      : isTreeTarget
+      ? 0x34d399
+      : 0xf59e0b;
 
     // Dotted parabolic trajectory arc from lemur to landing target
     const dots = 9;
@@ -1198,6 +1344,161 @@ export class LemurScene extends Phaser.Scene {
     }
   }
 
+  private updateRivalLemurs(dt: number): void {
+    for (const r of this.rivalLemurs) {
+      if (!r.active) continue;
+
+      r.ringGraphics.clear();
+
+      // Highlight occupied non-sanctuary tree so players can clearly read blocked crowns
+      const reservedTree = r.currentTree ?? r.targetTree;
+      if (reservedTree && !reservedTree.isSanctuary && !reservedTree.scorched) {
+        const { rx, ry } = this.getTreeEllipticalRadii(reservedTree);
+        r.ringGraphics.lineStyle(2.5, 0xf59e0b, 0.72);
+        r.ringGraphics.strokeEllipse(
+          reservedTree.container.x,
+          reservedTree.container.y,
+          rx * 2,
+          ry * 2
+        );
+      }
+
+      if (r.isLeaping) {
+        r.leapElapsed += dt;
+        const t = Phaser.Math.Clamp(r.leapElapsed / r.leapDuration, 0, 1);
+        r.x = Phaser.Math.Linear(r.startX, r.destX, t);
+        r.y = Phaser.Math.Linear(r.startY, r.destY, t);
+
+        const arc = Math.sin(t * Math.PI);
+        r.sprite.setTexture('lemur_leap');
+        r.sprite.setScale(1.0 + arc * 0.35);
+        r.sprite.setPosition(r.x, r.y - arc * 14);
+        r.tagText.setPosition(r.x, r.y - 32 - arc * 14);
+
+        if (t >= 1) {
+          r.isLeaping = false;
+          r.currentTree = r.targetTree;
+          r.targetTree = null;
+          r.sprite.setTexture('lemur_walk').setScale(1.0).setPosition(r.x, r.y);
+          r.tagText.setPosition(r.x, r.y - 26);
+
+          if (!r.currentTree || r.currentTree.isSanctuary) {
+            r.active = false;
+            r.sprite.setVisible(false);
+            r.tagText.setVisible(false);
+            r.ringGraphics.clear();
+            continue;
+          }
+
+          r.hopTimer = Phaser.Math.FloatBetween(1.8, 3.6);
+        }
+        continue;
+      }
+
+      // Sync gently with swaying tree crown
+      if (r.currentTree) {
+        if (r.currentTree.scorched) {
+          r.hopTimer = Math.min(r.hopTimer, 0);
+        } else {
+          r.x = r.currentTree.container.x;
+          r.y = r.currentTree.container.y;
+          r.sprite.setPosition(r.x, r.y);
+          r.tagText.setPosition(r.x, r.y - 26);
+
+          // Eat any uncollected TamarindFruit on this tree
+          for (const fruit of this.fruits) {
+            if (!fruit.collected && fruit.tree.id === r.currentTree.id) {
+              fruit.collected = true;
+              fruit.sprite.setVisible(false);
+              if (
+                Phaser.Math.Distance.Between(
+                  this.lemurX,
+                  this.lemurY,
+                  fruit.sprite.x,
+                  fruit.sprite.y
+                ) < 550
+              ) {
+                this.uiManager.spawnFloatingNotice(
+                  fruit.sprite.x,
+                  fruit.sprite.y - 20,
+                  'RIVAL LEMUR ATE FRUIT!',
+                  '#fbbf24'
+                );
+              }
+            }
+          }
+        }
+      }
+
+      // Advance tree-to-tree escape northward ahead of fire
+      const fireClose = this.fireFrontY - r.y < 420;
+      r.hopTimer -= dt * (fireClose ? 2.1 : 1.0);
+      if (r.hopTimer <= 0) {
+        const candidates = this.trees
+          .filter((candidate) => {
+            if (candidate.scorched) return false;
+            if (candidate.baseY >= r.y - 40) return false;
+            const dist = Phaser.Math.Distance.Between(
+              r.x,
+              r.y,
+              candidate.baseX,
+              candidate.baseY
+            );
+            if (dist >= 520) return false;
+            if (
+              !candidate.isSanctuary &&
+              this.currentTree?.id === candidate.id
+            ) {
+              return false;
+            }
+            if (this.isTreeOccupiedByRival(candidate, r.id)) {
+              return false;
+            }
+            return true;
+          })
+          .sort((a, b) => {
+            const da = Phaser.Math.Distance.Between(
+              r.x,
+              r.y,
+              a.baseX,
+              a.baseY
+            );
+            const db = Phaser.Math.Distance.Between(
+              r.x,
+              r.y,
+              b.baseX,
+              b.baseY
+            );
+            return da - db;
+          });
+
+        if (candidates.length > 0) {
+          const chosen = candidates[0];
+          r.currentTree = null;
+          r.targetTree = chosen;
+          r.isLeaping = true;
+          r.leapElapsed = 0;
+          r.leapDuration = 0.42;
+          r.startX = r.x;
+          r.startY = r.y;
+          r.destX = chosen.baseX + Phaser.Math.Between(-14, 14);
+          r.destY = chosen.baseY + Phaser.Math.Between(-14, 14);
+          r.sprite.setRotation(
+            Phaser.Math.Angle.Between(r.x, r.y, r.destX, r.destY)
+          );
+        } else if (r.currentTree?.scorched) {
+          // Overtaken with no escape route left -> disperse
+          r.active = false;
+          r.sprite.setVisible(false);
+          r.tagText.setVisible(false);
+          r.ringGraphics.clear();
+        } else {
+          r.hopTimer = 0.6;
+        }
+      }
+    }
+  }
+
   private updateFossas(dt: number): void {
     for (const fossa of this.fossas) {
       if (fossa.attackCooldown > 0) {
@@ -1275,14 +1576,9 @@ export class LemurScene extends Phaser.Scene {
     const struck = this.shippingManager.update(dt, {
       playerX: this.lemurX,
       playerY: this.lemurY,
+      checkCollision: !this.isLeaping,
       hitHalfWidth: 74,
       hitHalfHeight: 28,
-      onWakeOverlap: (truckVx, stepDt) => {
-        if (!this.isInCanopy && !this.isLeaping) {
-          this.lemurX += truckVx * stepDt * 0.75;
-          this.stamina = Math.max(0, this.stamina - 14 * stepDt);
-        }
-      },
     });
 
     if (struck) {
@@ -1503,13 +1799,22 @@ export class LemurScene extends Phaser.Scene {
       | undefined;
 
     if (this.isChargingLeap) {
-      const isTreeTarget = this.aimLandTree !== null;
-      secondaryBar = {
-        pct: this.leapCharge,
-        fillColor: isTreeTarget ? 0x34d399 : 0xf59e0b,
-        tagText: isTreeTarget ? 'TREE TARGET LOCKED' : 'GROUND LANDING',
-        tagColor: isTreeTarget ? '#34d399' : '#fbbf24',
-      };
+      if (this.aimTreeOccupied) {
+        secondaryBar = {
+          pct: this.leapCharge,
+          fillColor: 0xef4444,
+          tagText: 'TREE OCCUPIED — BLOCKED!',
+          tagColor: '#f87171',
+        };
+      } else {
+        const isTreeTarget = this.aimLandTree !== null;
+        secondaryBar = {
+          pct: this.leapCharge,
+          fillColor: isTreeTarget ? 0x34d399 : 0xf59e0b,
+          tagText: isTreeTarget ? 'TREE TARGET LOCKED' : 'GROUND LANDING',
+          tagColor: isTreeTarget ? '#34d399' : '#fbbf24',
+        };
+      }
     } else if (fireDistPx < 540) {
       const fireProximityPct = Phaser.Math.Clamp(1 - fireDistPx / 540, 0, 1);
       secondaryBar = {

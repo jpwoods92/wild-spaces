@@ -90,6 +90,7 @@ export interface ShippingCorridorConfig {
 export interface ShippingUpdateOptions {
   playerX: number;
   playerY: number;
+  checkCollision?: boolean;
   hitHalfWidth?: number;
   hitHalfHeight?: number;
   pulseInterval?: number;
@@ -242,6 +243,7 @@ export class ShippingCorridorManager {
     const {
       playerX,
       playerY,
+      checkCollision = true,
       hitHalfWidth = 74,
       hitHalfHeight = 30,
       pulseInterval,
@@ -323,26 +325,28 @@ export class ShippingCorridorManager {
         );
       }
 
-      // Direct hull collision check
-      if (
-        isShipHullCollision(
-          playerX,
-          playerY,
-          ship.x,
-          ship.y,
-          hitHalfWidth,
-          hitHalfHeight
-        )
-      ) {
-        return true;
-      }
+      // Direct hull & wake checks (skipped when airborne player leaps over corridor)
+      if (checkCollision) {
+        if (
+          isShipHullCollision(
+            playerX,
+            playerY,
+            ship.x,
+            ship.y,
+            hitHalfWidth,
+            hitHalfHeight
+          )
+        ) {
+          return true;
+        }
 
-      // Optional stern wake turbulence callback
-      if (
-        onWakeOverlap &&
-        isSternWakeOverlap(playerX, playerY, ship.x, ship.y, ship.vx)
-      ) {
-        onWakeOverlap(ship.vx, dt);
+        // Optional stern wake turbulence callback
+        if (
+          onWakeOverlap &&
+          isSternWakeOverlap(playerX, playerY, ship.x, ship.y, ship.vx)
+        ) {
+          onWakeOverlap(ship.vx, dt);
+        }
       }
     }
 

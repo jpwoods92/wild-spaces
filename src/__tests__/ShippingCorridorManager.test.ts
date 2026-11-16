@@ -226,5 +226,43 @@ describe('ShippingCorridorManager & off-screen vessel helpers', () => {
 
       manager.clear();
     });
+
+    it('skips hull collision when checkCollision is false while still moving and wrapping trucks', () => {
+      const { scene } = createMockShippingScene(1440, 480);
+      const manager = new ShippingCorridorManager(scene);
+
+      manager.spawnCorridors({
+        corridors: [{ x: 1200, y: 2000 }],
+        worldWidth: 2400,
+        bannerText: 'LOGGING HAUL ROAD',
+        shipsPerLane: 1,
+        eastboundSpeed: 200,
+        westboundSpeed: 200,
+        textureKey: 'logging_truck',
+        wakeStyle: 'none',
+      });
+
+      const truck = manager.getShips()[0];
+      assert.equal(truck.wakeStyle, 'none');
+
+      const prevX = truck.x;
+      // Player is directly over the truck's future position, but airborne (checkCollision: false)
+      const hitWhileLeaping = manager.update(0.1, {
+        playerX: prevX + 20,
+        playerY: truck.y,
+        checkCollision: false,
+      });
+      assert.equal(hitWhileLeaping, false);
+      assert.ok(Math.abs(truck.x - (prevX + 20)) < 1e-6);
+
+      // Once landed on the truck (checkCollision defaults to true), impact is detected
+      const hitAfterLanding = manager.update(0, {
+        playerX: truck.x,
+        playerY: truck.y,
+      });
+      assert.equal(hitAfterLanding, true);
+
+      manager.clear();
+    });
   });
 });
