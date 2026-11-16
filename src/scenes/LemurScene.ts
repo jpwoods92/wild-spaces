@@ -3,6 +3,10 @@ import {
   formatDuration,
   recordLevelCompletion,
 } from '../utils/LeaderboardStore';
+import {
+  clearActiveSession,
+  saveActiveSession,
+} from '../utils/SessionStore';
 import { shouldSpawnFoodAtNode } from '../utils/FoodScarcitySchedule';
 import { ShippingCorridorManager } from '../systems/ShippingCorridorManager';
 import {
@@ -253,6 +257,15 @@ export class LemurScene extends Phaser.Scene {
     });
     this.uiManager.redrawViewportBg(0x160e08);
     globalPauseManager.attachScene(this);
+    saveActiveSession('LemurScene', {
+      level: this.level,
+      carryMaxStamina: this.maxStamina,
+      cumulativeMeters: this.cumulativeMetersBeforeLevel,
+      totalGroundMeters: Math.round(this.totalGroundMeters),
+      fruitCollected: this.fruitCollected,
+      bestCanopyCombo: this.bestCanopyCombo,
+      cumulativeTimeSeconds: this.cumulativeTimeBeforeLevel,
+    });
 
     if (this.level > 1) {
       this.uiManager.spawnFloatingNotice(
@@ -1378,6 +1391,12 @@ export class LemurScene extends Phaser.Scene {
     won: boolean,
     deathReason: 'exhaustion' | 'truck' | 'fire' = 'exhaustion'
   ): void {
+    if (won) {
+      saveActiveSession('LemurScene', { ...this.getNextLevelData() });
+    } else {
+      clearActiveSession();
+    }
+
     const metersInCurrentLevel = Math.min(
       this.levelTargetMeters,
       Math.max(

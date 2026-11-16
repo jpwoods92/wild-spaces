@@ -4,6 +4,10 @@ import {
   recordLevelCompletion,
 } from '../utils/LeaderboardStore';
 import {
+  clearActiveSession,
+  saveActiveSession,
+} from '../utils/SessionStore';
+import {
   getFoodScarcityProfile,
   shouldSpawnFoodAtNode,
 } from '../utils/FoodScarcitySchedule';
@@ -261,6 +265,14 @@ export class WhaleScene extends Phaser.Scene {
     });
     this.uiManager.redrawViewportBg(0x030b17);
     globalPauseManager.attachScene(this);
+    saveActiveSession('WhaleScene', {
+      level: this.level,
+      cumulativeMeters: this.cumulativeMetersBeforeLevel,
+      cumulativeSwum: this.cumulativeSwumBeforeLevel,
+      cumulativeBlooms: this.cumulativeBloomsBeforeLevel,
+      cumulativeEntanglements: this.cumulativeEntanglementsBeforeLevel,
+      cumulativeTimeSeconds: this.cumulativeTimeBeforeLevel,
+    });
 
     // Emit an initial welcome sonar pulse so the player immediately sees the first bearing echo
     this.emitWhaleCall(true);
@@ -1430,6 +1442,12 @@ export class WhaleScene extends Phaser.Scene {
       cumulativeEntanglements: totalEntanglements,
       cumulativeTimeSeconds: totalTimeSeconds,
     };
+
+    if (won) {
+      saveActiveSession('WhaleScene', { ...nextLevelData });
+    } else {
+      clearActiveSession();
+    }
 
     const winState = window as unknown as {
       wildSpacesInfiniteMode?: boolean;

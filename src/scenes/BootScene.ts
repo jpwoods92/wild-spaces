@@ -4,6 +4,7 @@ import {
   POLAR_BEAR_ASSETS,
   WHALE_ASSETS,
 } from '../config/AssetManifest';
+import { getActiveSession } from '../utils/SessionStore';
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -31,9 +32,13 @@ export class BootScene extends Phaser.Scene {
     this.generateWhaleTextures();
     this.generateLemurTextures();
 
-    // Start on LemurScene (Episode 3) directly so the user can play the new episode right away,
-    // while keeping HubScene & Episodes 1-2 one click away via "World Habitat Map".
-    this.scene.start('LemurScene');
+    // Resume an in-progress episode if one was saved; otherwise open the Habitat Map home page
+    const activeSession = getActiveSession();
+    if (activeSession) {
+      this.scene.start(activeSession.episodeId, activeSession.sceneData);
+    } else {
+      this.scene.start('HubScene');
+    }
   }
 
   private generatePolarBearTextures(): void {

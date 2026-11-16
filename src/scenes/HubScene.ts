@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { globalPauseManager } from '../systems/PauseManager';
+import { clearActiveSession } from '../utils/SessionStore';
 
 interface EpisodeCard {
   id: string;
@@ -55,6 +56,14 @@ export class HubScene extends Phaser.Scene {
 
   create(): void {
     globalPauseManager.detachScene();
+    clearActiveSession();
+
+    const subtitleEl = document.querySelector('.brand-subtitle');
+    if (subtitleEl) {
+      subtitleEl.textContent =
+        'Global Habitat Crisis Map — Choose an Episode';
+    }
+
     const { width, height } = this.scale;
 
     // Deep atmospheric background

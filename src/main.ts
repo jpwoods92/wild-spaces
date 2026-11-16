@@ -19,6 +19,7 @@ import {
   LeaderboardEntry,
   recordLevelCompletion,
 } from './utils/LeaderboardStore';
+import { getActiveSession } from './utils/SessionStore';
 import { globalPauseManager } from './systems/PauseManager';
 
 const config: Phaser.Types.Core.GameConfig = {
@@ -59,7 +60,8 @@ function getDetectedEpisodeKey(): PlayableEpisodeKey {
 }
 
 // Track which episode is active for modal retry/continue actions
-let activeEpisodeKey: PlayableEpisodeKey = 'LemurScene';
+let activeEpisodeKey: PlayableEpisodeKey =
+  getActiveSession()?.episodeId ?? 'PolarBearScene';
 let pendingNextLevelData:
   | PolarBearSceneData
   | WhaleSceneData

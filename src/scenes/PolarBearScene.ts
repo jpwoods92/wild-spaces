@@ -4,6 +4,10 @@ import {
   recordLevelCompletion,
 } from '../utils/LeaderboardStore';
 import {
+  clearActiveSession,
+  saveActiveSession,
+} from '../utils/SessionStore';
+import {
   getFoodScarcityProfile,
   shouldSpawnFoodAtNode,
 } from '../utils/FoodScarcitySchedule';
@@ -233,6 +237,15 @@ export class PolarBearScene extends Phaser.Scene {
     });
     this.uiManager.redrawViewportBg(0x040d17);
     globalPauseManager.attachScene(this);
+    saveActiveSession('PolarBearScene', {
+      level: this.level,
+      carryMaxStamina: this.maxStamina,
+      cumulativeMeters: this.cumulativeMetersBeforeLevel,
+      totalSwimMeters: Math.round(this.totalSwimMeters),
+      sealsCaught: this.sealsCaught,
+      floesCollapsed: this.floesCollapsed,
+      cumulativeTimeSeconds: this.cumulativeTimeBeforeLevel,
+    });
 
     if (this.level > 1) {
       this.uiManager.spawnFloatingNotice(
@@ -1179,6 +1192,12 @@ export class PolarBearScene extends Phaser.Scene {
     won: boolean,
     deathReason: 'exhaustion' | 'ship' = 'exhaustion'
   ): void {
+    if (won) {
+      saveActiveSession('PolarBearScene', { ...this.getNextLevelData() });
+    } else {
+      clearActiveSession();
+    }
+
     const metersInCurrentLevel = Math.min(
       this.levelTargetMeters,
       Math.max(
