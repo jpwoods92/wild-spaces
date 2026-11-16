@@ -9,6 +9,7 @@ import {
 } from '../utils/SessionStore';
 import { shouldSpawnFoodAtNode } from '../utils/FoodScarcitySchedule';
 import {
+  areTreesBackToBack,
   CircleObstacle,
   resolveCircleObstacleMovement,
 } from '../utils/ObstacleAvoidance';
@@ -691,19 +692,37 @@ export class LemurScene extends Phaser.Scene {
 
     const rivalCount = Math.min(10, 2 + (this.level - 2) * 2);
     const eligibleTrees = this.trees
-      .filter((t) => !t.isSanctuary && t.id !== 1)
+      .filter(
+        (t) =>
+          !t.isSanctuary &&
+          t.id !== 1 &&
+          !areTreesBackToBack(
+            t.baseX,
+            t.baseY,
+            this.WORLD_WIDTH / 2,
+            this.startY
+          )
+      )
       .sort((a, b) => b.baseY - a.baseY);
 
     if (eligibleTrees.length === 0) return;
 
     for (let i = 0; i < rivalCount; i++) {
-      const idx = Math.min(
+      const baseIdx = Math.min(
         eligibleTrees.length - 1,
         Math.floor(((i + 0.5) / rivalCount) * eligibleTrees.length)
       );
-      const startTree = eligibleTrees[idx];
-      // Avoid placing two rivals on the exact same tree
-      if (this.isTreeOccupiedByRival(startTree)) continue;
+      let startTree: CanopyTree | null = null;
+      for (let offset = 0; offset < eligibleTrees.length; offset++) {
+        const candidate =
+          eligibleTrees[(baseIdx + offset) % eligibleTrees.length];
+        if (!this.hasBackToBackRival(candidate)) {
+          startTree = candidate;
+          break;
+        }
+      }
+      // Skip spawning if no non-back-to-back tree is available
+      if (!startTree) continue;
 
       const rx = startTree.baseX + Phaser.Math.Between(-14, 14);
       const ry = startTree.baseY + Phaser.Math.Between(-14, 14);
@@ -746,6 +765,24 @@ export class LemurScene extends Phaser.Scene {
         active: true,
       });
     }
+  }
+
+  private hasBackToBackRival(
+    tree: CanopyTree,
+    excludeRivalId?: number
+  ): boolean {
+    if (tree.isSanctuary) return false;
+    return this.rivalLemurs.some((r) => {
+      if (!r.active || r.id === excludeRivalId) return false;
+      const otherTree = r.targetTree ?? r.currentTree;
+      if (!otherTree || otherTree.isSanctuary) return false;
+      return areTreesBackToBack(
+        tree.baseX,
+        tree.baseY,
+        otherTree.baseX,
+        otherTree.baseY
+      );
+    });
   }
 
   private isTreeOccupiedByRival(
@@ -1444,6 +1481,8 @@ export class LemurScene extends Phaser.Scene {
         continue;
       }
 
+      let backToBackConflict = false;
+
       // Sync gently with swaying tree crown
       if (r.currentTree) {
         if (r.currentTree.scorched) {
@@ -1453,6 +1492,25 @@ export class LemurScene extends Phaser.Scene {
           r.y = r.currentTree.container.y;
           r.sprite.setPosition(r.x, r.y);
           r.tagText.setPosition(r.x, r.y - 26);
+
+          const conflictsWithRival = this.hasBackToBackRival(
+            r.currentTree,
+            r.id
+          );
+          const conflictsWithPlayer =
+            this.isInCanopy &&
+            this.currentTree !== null &&
+            !this.currentTree.isSanctuary &&
+            areTreesBackToBack(
+              r.currentTree.baseX,
+              r.currentTree.baseY,
+              this.currentTree.baseX,
+              this.currentTree.baseY
+            );
+          if (!r.isLeaping && (conflictsWithRival || conflictsWithPlayer)) {
+            backToBackConflict = true;
+            r.hopTimer = 0;
+          }
 
           // Eat any uncollected TamarindFruit on this tree
           for (const fruit of this.fruits) {
@@ -1482,7 +1540,8 @@ export class LemurScene extends Phaser.Scene {
       // Advance tree-to-tree escape northward ahead of fire
       const fireClose = this.fireFrontY - r.y < 420;
       r.hopTimer -= dt * (fireClose ? 2.1 : 1.0);
-      if (r.hopTimer <= 0) {
+      if (!r.isLeaping && r.hopTimer <= 0) {
+        const maxHopDist = backToBackConflict ? 760 : 520;
         const candidates = this.trees
           .filter((candidate) => {
             if (candidate.scorched) return false;
@@ -1493,14 +1552,31 @@ export class LemurScene extends Phaser.Scene {
               candidate.baseX,
               candidate.baseY
             );
-            if (dist >= 520) return false;
+            if (dist >= maxHopDist) return false;
             if (
               !candidate.isSanctuary &&
               this.currentTree?.id === candidate.id
             ) {
               return false;
             }
+            if (
+              !candidate.isSanctuary &&
+              this.isInCanopy &&
+              this.currentTree !== null &&
+              !this.currentTree.isSanctuary &&
+              areTreesBackToBack(
+                candidate.baseX,
+                candidate.baseY,
+                this.currentTree.baseX,
+                this.currentTree.baseY
+              )
+            ) {
+              return false;
+            }
             if (this.isTreeOccupiedByRival(candidate, r.id)) {
+              return false;
+            }
+            if (this.hasBackToBackRival(candidate, r.id)) {
               return false;
             }
             return true;
@@ -1535,8 +1611,8 @@ export class LemurScene extends Phaser.Scene {
           r.sprite.setRotation(
             Phaser.Math.Angle.Between(r.x, r.y, r.destX, r.destY)
           );
-        } else if (r.currentTree?.scorched) {
-          // Overtaken with no escape route left -> disperse
+        } else if (r.currentTree?.scorched || backToBackConflict) {
+          // Overtaken or back-to-back with no valid move -> disperse
           r.active = false;
           r.sprite.setVisible(false);
           r.tagText.setVisible(false);

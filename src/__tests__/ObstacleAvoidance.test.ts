@@ -1,6 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveCircleObstacleMovement } from '../utils/ObstacleAvoidance.ts';
+import {
+  areTreesBackToBack,
+  resolveCircleObstacleMovement,
+} from '../utils/ObstacleAvoidance.ts';
 
 describe('ObstacleAvoidance shared circle steering helper', () => {
   it('moves unobstructed at desired velocity when no trunk is nearby', () => {
@@ -41,5 +44,14 @@ describe('ObstacleAvoidance shared circle steering helper', () => {
     const dist = Math.hypot(res.x - trunk.x, res.y - trunk.y);
     assert.ok(Math.abs(dist - trunk.radius) < 1e-6);
     assert.ok(res.x >= trunk.x + trunk.radius - 1e-6);
+  });
+
+  it('flags trees in the same or consecutive vertical bands as back-to-back', () => {
+    // Same horizontal row / close vertical band
+    assert.equal(areTreesBackToBack(600, 1200, 1100, 1200), true);
+    // Consecutive vertical band without a clear band in between
+    assert.equal(areTreesBackToBack(600, 1200, 720, 820), true);
+    // Separated by at least one clear band and sufficient distance
+    assert.equal(areTreesBackToBack(600, 1200, 720, 520), false);
   });
 });

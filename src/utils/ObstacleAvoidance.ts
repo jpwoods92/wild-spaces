@@ -129,3 +129,23 @@ export function resolveCircleObstacleMovement(
     actualVy: steerVy,
   };
 }
+
+/**
+ * Returns true if two canopy trees are considered back-to-back (within the same
+ * horizontal band or consecutive vertical bands without at least one clear band
+ * or sufficient horizontal separation between them).
+ */
+export function areTreesBackToBack(
+  xA: number,
+  yA: number,
+  xB: number,
+  yB: number,
+  minVerticalGap = 620,
+  minDistance = 650
+): boolean {
+  const dy = Math.abs(yA - yB);
+  if (dy < minVerticalGap) {
+    return true;
+  }
+  return Math.hypot(xA - xB, yA - yB) < minDistance;
+}
