@@ -16,8 +16,8 @@ interface EpisodeCard {
 const EPISODES: EpisodeCard[] = [
   {
     id: 'PolarBearScene',
-    region: '01 • BEAUFORT SEA, ARCTIC',
-    title: 'The Thinning North',
+    region: 'BEAUFORT SEA, ARCTIC',
+    title: '01 • The Thinning North',
     species: 'Polar Bear (Ursus maritimus)',
     status: 'VULNERABLE — 13% sea-ice loss/decade',
     mechanicSummary:
@@ -27,8 +27,8 @@ const EPISODES: EpisodeCard[] = [
   },
   {
     id: 'WhaleScene',
-    region: '02 • NORTH ATLANTIC OCEAN',
-    title: 'Drowned Echoes',
+    region: 'NORTH ATLANTIC OCEAN',
+    title: '02 • Drowned Echoes',
     species: 'North Atlantic Right Whale',
     status: 'CRITICALLY ENDANGERED — <360 remaining',
     mechanicSummary:
@@ -38,8 +38,8 @@ const EPISODES: EpisodeCard[] = [
   },
   {
     id: 'LemurScene',
-    region: '03 • SPINY FOREST, MADAGASCAR',
-    title: 'Fractured Canopy',
+    region: 'SPINY FOREST, MADAGASCAR',
+    title: '03 • Fractured Canopy',
     species: 'Ring-Tailed Lemur (Lemur catta)',
     status: 'ENDANGERED — >80% habitat fragmented',
     mechanicSummary:
@@ -140,16 +140,16 @@ export class HubScene extends Phaser.Scene {
     };
     drawCard(false);
 
-    const regionText = this.add.text(-w / 2 + 22, -h / 2 + 24, ep.region, {
+    const titleText = this.add.text(-w / 2 + 22, -h / 2 + 22, ep.title, {
+      fontSize: '21px',
+      fontStyle: 'bold',
+      color: '#ffffff',
+    });
+
+    const regionText = this.add.text(-w / 2 + 22, -h / 2 + 54, ep.region, {
       fontSize: '11px',
       fontStyle: 'bold',
       color: '#7dd3fc',
-    });
-
-    const titleText = this.add.text(-w / 2 + 22, -h / 2 + 48, ep.title, {
-      fontSize: '22px',
-      fontStyle: 'bold',
-      color: '#ffffff',
     });
 
     const speciesText = this.add.text(-w / 2 + 22, -h / 2 + 80, ep.species, {
@@ -199,8 +199,8 @@ export class HubScene extends Phaser.Scene {
 
     container.add([
       panel,
-      regionText,
       titleText,
+      regionText,
       speciesText,
       statusBadge,
       summaryText,
