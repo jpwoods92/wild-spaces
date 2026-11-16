@@ -374,7 +374,7 @@ winState.showPolarBearImpactModal = (payload) => {
           payload.level + 1
         } (${payload.nextLevelMeters}m) where ice patches and seals grow even scarcer!`
       : payload.deathReason === 'ship'
-      ? `As melting sea ice opens new commercial shipping corridors across the Arctic, vessel traffic has surged—creating lethal open-water crossings for migrating wildlife (${payload.totalMetersMigrated}m total progress).`
+      ? `As melting sea ice opens new commercial shipping corridors across the Arctic, vessel traffic has surged, creating lethal open-water crossings for migrating wildlife (${payload.totalMetersMigrated}m total progress).`
       : `You reached Level ${payload.level} (${payload.metersInLevel}m / ${payload.levelTargetMeters}m in this level, ${payload.totalMetersMigrated}m total) before your stamina gave out in open water.`,
     nextButtonLabel: `Continue North (Level ${payload.level + 1} • ${payload.nextLevelMeters}m →)`,
     nextLevelData: payload.nextLevelData,
@@ -387,7 +387,7 @@ winState.showPolarBearImpactModal = (payload) => {
     totalTimeSeconds: payload.totalTimeSeconds,
     factHeading: 'Real-World Arctic Crisis',
     factBody:
-      'Arctic sea ice is shrinking by nearly 13% per decade. As seasonal ice breaks up weeks earlier each spring, polar bears are forced to swim up to 3x farther across freezing open water—burning critical fat reserves needed to nurse their cubs.',
+      'Arctic sea ice is shrinking by nearly 13% per decade. As seasonal ice breaks up weeks earlier each spring, polar bears are forced to swim up to 3x farther across freezing open water, burning critical fat reserves needed to nurse their cubs.',
   });
 };
 
@@ -475,7 +475,7 @@ winState.showLemurImpactModal = (payload) => {
     totalTimeSeconds: payload.totalTimeSeconds,
     factHeading: 'Madagascar Spiny Forest Deforestation (>80% Lost)',
     factBody:
-      'More than 80% of Madagascar’s original spiny and dry forests have been cleared for charcoal production and illegal hardwood logging. Forced down onto open ground between fragmented treetops, Ring-Tailed Lemurs face intense heat stress and ambush predators like the Fossa—driving wild populations down by over 95% since 2000.',
+      'More than 80% of Madagascar’s original spiny and dry forests have been cleared for charcoal production and illegal hardwood logging. Forced down onto open ground between fragmented treetops, Ring-Tailed Lemurs face intense heat stress and ambush predators like the Fossa, driving wild populations down by over 95% since 2000.',
   });
 };
 
