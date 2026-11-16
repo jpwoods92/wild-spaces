@@ -17,6 +17,7 @@ import {
   getStaminaSpeedMultiplier,
 } from '../systems/EpisodeUIManager';
 import { globalPauseManager } from '../systems/PauseManager';
+import { AbilityCooldown } from '../utils/AbilityCooldown';
 
 interface IceFloe {
   id: number;
@@ -91,7 +92,7 @@ export class PolarBearScene extends Phaser.Scene {
 
   // Lunge / Dash state
   private lungeTimer = 0;
-  private lungeCooldown = 0;
+  private lungeCooldown = new AbilityCooldown(1.4);
   private lungeDirX = 0;
   private lungeDirY = 0;
 
@@ -271,7 +272,7 @@ export class PolarBearScene extends Phaser.Scene {
     this.isOnIce = true;
     this.currentFloe = null;
     this.lungeTimer = 0;
-    this.lungeCooldown = 0;
+    this.lungeCooldown.reset();
     this.shippingCorridorCenters = [];
     if (!this.shippingManager) {
       this.shippingManager = new ShippingCorridorManager(this);
@@ -862,7 +863,7 @@ export class PolarBearScene extends Phaser.Scene {
   }
 
   private updateBearMovement(dt: number): void {
-    this.lungeCooldown = Math.max(0, this.lungeCooldown - dt);
+    this.lungeCooldown.tick(dt);
 
     let inputX = 0;
     let inputY = 0;
@@ -905,9 +906,9 @@ export class PolarBearScene extends Phaser.Scene {
       (Phaser.Input.Keyboard.JustDown(this.wasd.SPACE) ||
         Phaser.Input.Keyboard.JustDown(this.wasd.SHIFT));
 
-    if (lungePressed && this.lungeCooldown <= 0 && this.stamina >= 14) {
+    if (lungePressed && this.lungeCooldown.isReady() && this.stamina >= 14) {
       this.lungeTimer = 0.26;
-      this.lungeCooldown = 0.75;
+      this.lungeCooldown.trigger();
       this.stamina = Math.max(0, this.stamina - 14);
       this.lungeDirX = Math.cos(this.bearAngle);
       this.lungeDirY = Math.sin(this.bearAngle);
@@ -1304,6 +1305,13 @@ export class PolarBearScene extends Phaser.Scene {
         fillColor: secsLeft < 1.5 ? 0xef4444 : 0xf59e0b,
         tagText: `${secsLeft.toFixed(1)}s`,
         tagColor: secsLeft < 1.5 ? '#f87171' : '#fbbf24',
+      };
+    } else if (!this.lungeCooldown.isReady()) {
+      secondaryBar = {
+        pct: this.lungeCooldown.getRechargePct(),
+        fillColor: 0x94a3b8,
+        tagText: `LUNGE ${this.lungeCooldown.getRemaining().toFixed(1)}s`,
+        tagColor: '#cbd5e1',
       };
     }
 

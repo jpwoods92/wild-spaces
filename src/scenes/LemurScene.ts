@@ -13,6 +13,7 @@ import {
   CircleObstacle,
   resolveCircleObstacleMovement,
 } from '../utils/ObstacleAvoidance';
+import { AbilityCooldown } from '../utils/AbilityCooldown';
 import { ShippingCorridorManager } from '../systems/ShippingCorridorManager';
 import {
   EpisodeUIManager,
@@ -117,6 +118,7 @@ export class LemurScene extends Phaser.Scene {
   private isInCanopy = true;
   private currentTree: CanopyTree | null = null;
   private isChargingLeap = false;
+  private leapCooldown = new AbilityCooldown(1.1);
   private leapCharge = 0;
   private isLeaping = false;
   private leapElapsed = 0;
@@ -323,6 +325,7 @@ export class LemurScene extends Phaser.Scene {
     this.currentTree = null;
     this.isChargingLeap = false;
     this.leapCharge = 0;
+    this.leapCooldown.reset();
     this.isLeaping = false;
     this.leapElapsed = 0;
     this.leapOriginTreeId = null;
@@ -997,6 +1000,8 @@ export class LemurScene extends Phaser.Scene {
   }
 
   private updateLemurMovement(dt: number): void {
+    if (!this.isLeaping) this.leapCooldown.tick(dt);
+
     // 1. Mid-air parabolic leap flight
     if (this.isLeaping) {
       this.leapElapsed += dt;
@@ -1024,6 +1029,7 @@ export class LemurScene extends Phaser.Scene {
 
       if (t >= 1) {
         this.isLeaping = false;
+        this.leapCooldown.trigger();
         this.lemur.setTexture('lemur_walk');
         this.lemur.setScale(1.0);
         this.lemur.setPosition(this.lemurX, this.lemurY);
@@ -1128,9 +1134,12 @@ export class LemurScene extends Phaser.Scene {
     }
 
     // 3. Hold SPACE / SHIFT to charge leap; release to launch parabolic arc
+    // Leap is gated by a shared cooldown that starts on landing; a charge
+    // already in progress is never interrupted.
     const leapHeld =
       this.wasd &&
-      (this.wasd.SPACE.isDown || this.wasd.SHIFT.isDown);
+      (this.wasd.SPACE.isDown || this.wasd.SHIFT.isDown) &&
+      (this.isChargingLeap || this.leapCooldown.isReady());
 
     if (leapHeld) {
       if (!this.isChargingLeap) {
@@ -1974,6 +1983,13 @@ export class LemurScene extends Phaser.Scene {
           tagColor: isTreeTarget ? '#34d399' : '#fbbf24',
         };
       }
+    } else if (!this.isLeaping && !this.leapCooldown.isReady()) {
+      secondaryBar = {
+        pct: this.leapCooldown.getRechargePct(),
+        fillColor: 0x94a3b8,
+        tagText: `LEAP ${this.leapCooldown.getRemaining().toFixed(1)}s`,
+        tagColor: '#cbd5e1',
+      };
     } else if (fireDistPx < 540) {
       const fireProximityPct = Phaser.Math.Clamp(1 - fireDistPx / 540, 0, 1);
       secondaryBar = {
