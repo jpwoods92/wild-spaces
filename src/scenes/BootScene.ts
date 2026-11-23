@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import {
   LEMUR_ASSETS,
   POLAR_BEAR_ASSETS,
+  TURTLE_ASSETS,
   WHALE_ASSETS,
 } from '../config/AssetManifest';
 import { getActiveSession } from '../utils/SessionStore';
@@ -17,6 +18,7 @@ export class BootScene extends Phaser.Scene {
       ...POLAR_BEAR_ASSETS,
       ...WHALE_ASSETS,
       ...LEMUR_ASSETS,
+      ...TURTLE_ASSETS,
     ]) {
       if (asset.useExternalFile) {
         this.load.image(asset.key, asset.filePath);
@@ -31,6 +33,7 @@ export class BootScene extends Phaser.Scene {
     this.generateEnvironmentTextures();
     this.generateWhaleTextures();
     this.generateLemurTextures();
+    this.generateTurtleTextures();
 
     // Resume an in-progress episode if one was saved; otherwise open the Habitat Map home page
     const activeSession = getActiveSession();
@@ -789,6 +792,217 @@ export class BootScene extends Phaser.Scene {
       g.fillStyle(0x4ade80, 0.85);
       g.fillEllipse(4, 4, 7, 4);
       g.generateTexture('leaf_dot', 8, 8);
+      g.destroy();
+    }
+  }
+
+  private generateTurtleTextures(): void {
+    // 1. Hatchling Loggerhead Sea Turtle crawling (44x36 px, facing right / 0 rad)
+    if (!this.textures.exists('turtle_crawl')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      const cy = 18;
+
+      // Soft ground shadow
+      g.fillStyle(0x020617, 0.35);
+      g.fillEllipse(21, cy + 1.5, 26, 19);
+
+      // Rear flippers
+      g.fillStyle(0x3f4f3c, 1);
+      g.fillEllipse(9, cy - 8, 9, 4.5);
+      g.fillEllipse(9, cy + 8, 9, 4.5);
+
+      // Broad front swimming/crawling flippers
+      g.fillStyle(0x4d6046, 1);
+      g.fillEllipse(25, cy - 13, 13, 5.5);
+      g.fillEllipse(25, cy + 13, 13, 5.5);
+
+      // Carapace oval with ridge scutes
+      g.fillStyle(0x3b4d36, 1);
+      g.fillEllipse(20, cy, 22, 16);
+      g.fillStyle(0x556b49, 1);
+      g.fillEllipse(20, cy, 15, 11);
+      g.fillStyle(0x6e875d, 0.9);
+      g.fillEllipse(20, cy, 9, 4);
+
+      // Head facing right + dark eyes
+      g.fillStyle(0x4d6046, 1);
+      g.fillEllipse(34, cy, 10, 7.5);
+      g.fillStyle(0x0f172a, 1);
+      g.fillCircle(36.5, cy - 2.3, 1.3);
+      g.fillCircle(36.5, cy + 2.3, 1.3);
+
+      g.generateTexture('turtle_crawl', 44, 36);
+      g.destroy();
+    }
+
+    // 2. Hatchling tucked & camouflaged in sand mound (44x36 px)
+    if (!this.textures.exists('turtle_burrow')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      const cy = 18;
+
+      // Disturbed sand rim & mound
+      g.fillStyle(0x334155, 0.85);
+      g.fillEllipse(22, cy, 34, 24);
+      g.fillStyle(0x475569, 0.95);
+      g.fillEllipse(22, cy, 27, 19);
+
+      // Subtle half-buried shell outline & sand grains
+      g.fillStyle(0x3b4d36, 0.65);
+      g.fillEllipse(22, cy, 16, 12);
+      g.fillStyle(0x64748b, 0.9);
+      g.fillCircle(17, cy - 4, 2.2);
+      g.fillCircle(26, cy + 4, 2.4);
+      g.fillCircle(24, cy - 5, 1.8);
+      g.fillCircle(18, cy + 5, 2.0);
+
+      g.generateTexture('turtle_burrow', 44, 36);
+      g.destroy();
+    }
+
+    // 3. Nocturnal Ghost Crab predator (40x34 px, facing right / 0 rad)
+    if (!this.textures.exists('ghost_crab')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      const cy = 17;
+
+      // Shadow
+      g.fillStyle(0x020617, 0.35);
+      g.fillEllipse(19, cy + 1.5, 22, 18);
+
+      // Scuttling legs (3 per side)
+      g.lineStyle(2.2, 0xcbd5e1, 1);
+      for (const offset of [-5, 0, 5]) {
+        g.lineBetween(18 + offset, cy - 7, 16 + offset * 1.3, cy - 14);
+        g.lineBetween(18 + offset, cy + 7, 16 + offset * 1.3, cy + 14);
+      }
+
+      // Front pincers reaching right
+      g.fillStyle(0xf1f5f9, 1);
+      g.fillEllipse(31, cy - 7, 10, 4.5);
+      g.fillEllipse(31, cy + 7, 10, 4.5);
+
+      // Pale square-oval carapace
+      g.fillStyle(0xe2e8f0, 1);
+      g.fillRoundedRect(10, cy - 9, 17, 18, 5);
+      g.fillStyle(0xcbd5e1, 1);
+      g.fillRoundedRect(13, cy - 6, 11, 12, 3);
+
+      // Dark eye stalks
+      g.fillStyle(0x0f172a, 1);
+      g.fillCircle(26, cy - 3.5, 1.8);
+      g.fillCircle(26, cy + 3.5, 1.8);
+
+      g.generateTexture('ghost_crab', 40, 34);
+      g.destroy();
+    }
+
+    // 4. Overhead coastal seabird silhouette (72x52 px, facing right / 0 rad)
+    if (!this.textures.exists('seabird_shadow')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      const cy = 26;
+
+      // Swept wings
+      g.fillStyle(0x0f172a, 0.92);
+      g.fillTriangle(44, cy, 18, 3, 24, cy);
+      g.fillTriangle(44, cy, 18, 49, 24, cy);
+
+      // Pale wingtips
+      g.fillStyle(0xcbd5e1, 0.85);
+      g.fillCircle(19, 6, 3);
+      g.fillCircle(19, 46, 3);
+
+      // Tapered fuselage & tail feathers
+      g.fillStyle(0x1e293b, 0.96);
+      g.fillEllipse(36, cy, 34, 10);
+      g.fillTriangle(20, cy, 7, cy - 6, 7, cy + 6);
+
+      // Beak
+      g.fillStyle(0xf59e0b, 0.95);
+      g.fillTriangle(52, cy - 2.5, 52, cy + 2.5, 65, cy);
+
+      g.generateTexture('seabird_shadow', 72, 52);
+      g.destroy();
+    }
+
+    // 5. Tangled beach plastic debris snare (58x46 px)
+    if (!this.textures.exists('plastic_debris')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+
+      // Translucent crumpled plastic bag sheet
+      g.fillStyle(0xbae6fd, 0.34);
+      g.fillRoundedRect(6, 9, 34, 26, 8);
+      g.fillStyle(0xe0f2fe, 0.28);
+      g.fillEllipse(36, 23, 26, 20);
+
+      // Six-pack plastic rings
+      g.lineStyle(2, 0xf8fafc, 0.8);
+      g.strokeCircle(20, 20, 6.5);
+      g.strokeCircle(31, 20, 6.5);
+      g.strokeCircle(25, 29, 6.5);
+
+      // Discarded bottle caps
+      g.fillStyle(0xef4444, 0.9);
+      g.fillCircle(44, 17, 4.5);
+      g.fillStyle(0x3b82f6, 0.9);
+      g.fillCircle(14, 33, 4);
+
+      g.generateTexture('plastic_debris', 58, 46);
+      g.destroy();
+    }
+
+    // 6. Cool damp tide-pool kelp patch (52x52 px)
+    if (!this.textures.exists('wet_kelp')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+
+      // Cool moisture puddle aura
+      g.fillStyle(0x0d9488, 0.32);
+      g.fillCircle(26, 26, 23);
+      g.fillStyle(0x2dd4bf, 0.28);
+      g.fillCircle(26, 26, 16);
+
+      // Tangled dark emerald & olive kelp ribbons
+      g.fillStyle(0x065f46, 0.95);
+      g.fillEllipse(20, 22, 22, 8);
+      g.fillEllipse(31, 29, 22, 8);
+      g.fillStyle(0x10b981, 0.9);
+      g.fillEllipse(26, 24, 18, 7);
+      g.fillStyle(0x5eead4, 0.85);
+      g.fillCircle(24, 19, 2.2);
+      g.fillCircle(31, 27, 2);
+
+      g.generateTexture('wet_kelp', 52, 52);
+      g.destroy();
+    }
+
+    // 7. Weathered driftwood cover casting dark shade (92x42 px)
+    if (!this.textures.exists('driftwood_cover')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+
+      // Ground shadow
+      g.fillStyle(0x020617, 0.45);
+      g.fillEllipse(46, 24, 86, 30);
+
+      // Main weathered driftwood trunk & fork
+      g.fillStyle(0x574c41, 1);
+      g.fillRoundedRect(6, 12, 78, 17, 7);
+      g.fillStyle(0x786858, 1);
+      g.fillRoundedRect(10, 14, 68, 11, 5);
+      g.fillStyle(0x8c7a68, 0.8);
+      g.fillRoundedRect(16, 17, 46, 4, 2);
+
+      // Broken stub branch
+      g.fillStyle(0x574c41, 1);
+      g.fillRoundedRect(54, 5, 16, 10, 4);
+
+      g.generateTexture('driftwood_cover', 92, 42);
+      g.destroy();
+    }
+
+    // 8. Moonlit sand / sea spray speck particle (8x8 px)
+    if (!this.textures.exists('sand_dot')) {
+      const g = this.make.graphics({ x: 0, y: 0 });
+      g.fillStyle(0xcbd5e1, 0.7);
+      g.fillCircle(4, 4, 2.5);
+      g.generateTexture('sand_dot', 8, 8);
       g.destroy();
     }
   }

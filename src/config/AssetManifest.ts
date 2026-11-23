@@ -171,3 +171,72 @@ export const LEMUR_ASSETS: SpriteAssetSpec[] = [
     useExternalFile: false,
   },
 ];
+
+/**
+ * Central manifest for Episode 4 (Loggerhead Sea Turtle Hatchling — "False Horizon").
+ */
+export const TURTLE_ASSETS: SpriteAssetSpec[] = [
+  {
+    key: 'turtle_crawl',
+    description:
+      'Top-down Loggerhead Sea Turtle hatchling crawling across moonlit sand (facing right / 0 rad)',
+    dimensions: '44x36 px per frame',
+    frames: 4,
+    filePath: '/assets/turtle/turtle_crawl.png',
+    useExternalFile: false,
+  },
+  {
+    key: 'turtle_burrow',
+    description:
+      'Hatchling tucked low and camouflaged inside a sand mound during burrow stealth',
+    dimensions: '44x36 px single frame',
+    frames: 1,
+    filePath: '/assets/turtle/turtle_burrow.png',
+    useExternalFile: false,
+  },
+  {
+    key: 'ghost_crab',
+    description:
+      'Top-down pale nocturnal Ghost Crab predator patrolling the coastal beach',
+    dimensions: '40x34 px per frame',
+    frames: 4,
+    filePath: '/assets/turtle/ghost_crab.png',
+    useExternalFile: false,
+  },
+  {
+    key: 'seabird_shadow',
+    description:
+      'Overhead gliding coastal gull / frigatebird silhouette sweeping over the shore',
+    dimensions: '72x52 px per frame',
+    frames: 2,
+    filePath: '/assets/turtle/seabird_shadow.png',
+    useExternalFile: false,
+  },
+  {
+    key: 'plastic_debris',
+    description:
+      'Tangled beach plastic six-pack rings, bag sheet, and bottle cap snare hazard',
+    dimensions: '58x46 px single frame',
+    frames: 1,
+    filePath: '/assets/turtle/plastic_debris.png',
+    useExternalFile: false,
+  },
+  {
+    key: 'wet_kelp',
+    description:
+      'Cool damp tide-pool seaweed patch for stamina and hydration recovery',
+    dimensions: '52x52 px per frame',
+    frames: 2,
+    filePath: '/assets/turtle/wet_kelp.png',
+    useExternalFile: false,
+  },
+  {
+    key: 'driftwood_cover',
+    description:
+      'Weathered driftwood log casting protective dark shade from coastal glare and diving birds',
+    dimensions: '92x42 px single frame',
+    frames: 1,
+    filePath: '/assets/turtle/driftwood_cover.png',
+    useExternalFile: false,
+  },
+];

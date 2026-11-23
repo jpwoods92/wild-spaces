@@ -70,6 +70,23 @@ describe('SessionStore shared active-session persistence', () => {
     });
   });
 
+  it('saves and restores TurtleScene session cleanly', () => {
+    const saved = saveActiveSession('TurtleScene', {
+      level: 2,
+      carryMaxStamina: 92,
+      cumulativeMeters: 150,
+      predatorsEvaded: 3,
+      kelpCollected: 4,
+    });
+
+    assert.equal(saved.episodeId, 'TurtleScene');
+    const restored = getActiveSession();
+    assert.ok(restored !== null);
+    assert.equal(restored?.episodeId, 'TurtleScene');
+    assert.equal(restored?.sceneData.level, 2);
+    assert.equal(restored?.sceneData.predatorsEvaded, 3);
+  });
+
   it('clears the active session when returning to Habitat Map or on game over', () => {
     saveActiveSession('WhaleScene', { level: 3 });
     assert.ok(getActiveSession() !== null);

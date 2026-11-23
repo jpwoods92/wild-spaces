@@ -47,6 +47,17 @@ const EPISODES: EpisodeCard[] = [
     playable: true,
     accentColor: 0x34d399,
   },
+  {
+    id: 'TurtleScene',
+    region: 'ATLANTIC NESTING BEACH',
+    title: '04 • False Horizon',
+    species: 'Loggerhead Sea Turtle (Caretta caretta)',
+    status: 'VULNERABLE: 1 in 1,000 reach adulthood',
+    mechanicSummary:
+      'Crawl from your dune nest to the moonlit surf. Hold SPACE to burrow under sand as seabirds dive and ghost crabs prowl, while resisting resort light pull and plastic debris.',
+    playable: true,
+    accentColor: 0xf59e0b,
+  },
 ];
 
 export class HubScene extends Phaser.Scene {
@@ -109,16 +120,40 @@ export class HubScene extends Phaser.Scene {
       )
       .setOrigin(0.5);
 
-    const cardWidth = Math.min(340, (width - 100) / 3);
-    const cardHeight = 350;
-    const totalW = cardWidth * 3 + 48;
-    const startX = (width - totalW) / 2 + cardWidth / 2;
-    const cardY = height / 2 + 30;
+    if (width >= 1080) {
+      const gap = 18;
+      const cardWidth = Math.min(290, (width - 96 - gap * 3) / 4);
+      const cardHeight = Math.min(355, Math.max(300, height - 200));
+      const totalW = cardWidth * 4 + gap * 3;
+      const startX = (width - totalW) / 2 + cardWidth / 2;
+      const cardY = Math.max(156 + cardHeight / 2, height / 2 + 30);
 
-    EPISODES.forEach((ep, idx) => {
-      const cx = startX + idx * (cardWidth + 24);
-      this.createEpisodeCard(cx, cardY, cardWidth, cardHeight, ep);
-    });
+      EPISODES.forEach((ep, idx) => {
+        const cx = startX + idx * (cardWidth + gap);
+        this.createEpisodeCard(cx, cardY, cardWidth, cardHeight, ep);
+      });
+    } else {
+      const gapX = 20;
+      const gapY = 18;
+      const cardWidth = Math.min(340, (width - 72) / 2);
+      const cardHeight = Math.min(
+        275,
+        Math.max(220, Math.floor((height - 195) / 2))
+      );
+      const totalW = cardWidth * 2 + gapX;
+      const totalH = cardHeight * 2 + gapY;
+      const startX = (width - totalW) / 2 + cardWidth / 2;
+      const startY =
+        Math.max(156, (height + 140 - totalH) / 2) + cardHeight / 2;
+
+      EPISODES.forEach((ep, idx) => {
+        const col = idx % 2;
+        const row = Math.floor(idx / 2);
+        const cx = startX + col * (cardWidth + gapX);
+        const cy = startY + row * (cardHeight + gapY);
+        this.createEpisodeCard(cx, cy, cardWidth, cardHeight, ep);
+      });
+    }
   }
 
   private createEpisodeCard(
@@ -129,6 +164,9 @@ export class HubScene extends Phaser.Scene {
     ep: EpisodeCard
   ): void {
     const container = this.add.container(x, y);
+    const compactW = w < 300;
+    const compactH = h < 300;
+    const padX = compactW ? 16 : 22;
 
     const panel = this.add.graphics();
     const drawCard = (hover: boolean) => {
@@ -140,52 +178,74 @@ export class HubScene extends Phaser.Scene {
     };
     drawCard(false);
 
-    const titleText = this.add.text(-w / 2 + 22, -h / 2 + 22, ep.title, {
-      fontSize: '21px',
-      fontStyle: 'bold',
-      color: '#ffffff',
-    });
+    const titleText = this.add.text(
+      -w / 2 + padX,
+      -h / 2 + (compactH ? 16 : 22),
+      ep.title,
+      {
+        fontSize: compactW ? '18px' : '21px',
+        fontStyle: 'bold',
+        color: '#ffffff',
+      }
+    );
 
-    const regionText = this.add.text(-w / 2 + 22, -h / 2 + 54, ep.region, {
-      fontSize: '11px',
-      fontStyle: 'bold',
-      color: '#7dd3fc',
-    });
+    const regionText = this.add.text(
+      -w / 2 + padX,
+      -h / 2 + (compactH ? 42 : 54),
+      ep.region,
+      {
+        fontSize: compactW ? '10px' : '11px',
+        fontStyle: 'bold',
+        color: '#7dd3fc',
+      }
+    );
 
-    const speciesText = this.add.text(-w / 2 + 22, -h / 2 + 80, ep.species, {
-      fontSize: '13px',
-      color: '#cbd5e1',
-    });
+    const speciesText = this.add.text(
+      -w / 2 + padX,
+      -h / 2 + (compactH ? 60 : 80),
+      ep.species,
+      {
+        fontSize: compactW || compactH ? '12px' : '13px',
+        color: '#cbd5e1',
+      }
+    );
 
-    const statusBadge = this.add.text(-w / 2 + 22, -h / 2 + 108, ep.status, {
-      fontSize: '11px',
-      fontStyle: 'bold',
-      color: ep.playable ? '#fbbf24' : '#f87171',
-      backgroundColor: 'rgba(15, 23, 42, 0.85)',
-      padding: { x: 8, y: 5 },
-    });
+    const statusBadge = this.add.text(
+      -w / 2 + padX,
+      -h / 2 + (compactH ? 82 : 108),
+      ep.status,
+      {
+        fontSize: compactW || compactH ? '10px' : '11px',
+        fontStyle: 'bold',
+        color: ep.playable ? '#fbbf24' : '#f87171',
+        backgroundColor: 'rgba(15, 23, 42, 0.85)',
+        padding: { x: 8, y: 4 },
+        wordWrap: { width: w - padX * 2 },
+      }
+    );
 
+    const summaryY = statusBadge.y + statusBadge.height + (compactH ? 8 : 14);
     const summaryText = this.add.text(
-      -w / 2 + 22,
-      -h / 2 + 148,
+      -w / 2 + padX,
+      summaryY,
       ep.mechanicSummary,
       {
-        fontSize: '13px',
+        fontSize: compactW || compactH ? '12px' : '13px',
         color: '#94a3b8',
-        lineSpacing: 5,
-        wordWrap: { width: w - 44 },
+        lineSpacing: compactH ? 3 : 5,
+        wordWrap: { width: w - padX * 2 },
       }
     );
 
     const btnBg = this.add.graphics();
-    const btnY = h / 2 - 42;
+    const btnY = h / 2 - (compactH ? 30 : 42);
     btnBg.fillStyle(ep.playable ? ep.accentColor : 0x1e293b, 1);
-    btnBg.fillRoundedRect(-w / 2 + 22, btnY - 18, w - 44, 38, 8);
+    btnBg.fillRoundedRect(-w / 2 + padX, btnY - 18, w - padX * 2, 36, 8);
 
     const btnLabel = this.add
       .text(
         0,
-        btnY + 1,
+        btnY,
         ep.playable
           ? `▶  PLAY EPISODE ${EPISODES.indexOf(ep) + 1}`
           : 'PLANNED FOR EPISODE ' + (EPISODES.indexOf(ep) + 1),

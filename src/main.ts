@@ -7,9 +7,11 @@ import {
 } from './scenes/PolarBearScene';
 import { WhaleScene, WhaleSceneData } from './scenes/WhaleScene';
 import { LemurScene, LemurSceneData } from './scenes/LemurScene';
+import { TurtleScene, TurtleSceneData } from './scenes/TurtleScene';
 import {
   LEMUR_ASSETS,
   POLAR_BEAR_ASSETS,
+  TURTLE_ASSETS,
   WHALE_ASSETS,
 } from './config/AssetManifest';
 import {
@@ -32,16 +34,28 @@ const config: Phaser.Types.Core.GameConfig = {
     width: window.innerWidth,
     height: window.innerHeight - 52,
   },
-  scene: [BootScene, LemurScene, WhaleScene, PolarBearScene, HubScene],
+  scene: [
+    BootScene,
+    TurtleScene,
+    LemurScene,
+    WhaleScene,
+    PolarBearScene,
+    HubScene,
+  ],
 };
 
 const game = new Phaser.Game(config);
 
-type PlayableEpisodeKey = 'PolarBearScene' | 'WhaleScene' | 'LemurScene';
+type PlayableEpisodeKey =
+  | 'PolarBearScene'
+  | 'WhaleScene'
+  | 'LemurScene'
+  | 'TurtleScene';
 const EPISODE_KEYS: PlayableEpisodeKey[] = [
   'PolarBearScene',
   'WhaleScene',
   'LemurScene',
+  'TurtleScene',
 ];
 
 function stopGameplayScenes(): void {
@@ -66,6 +80,7 @@ let pendingNextLevelData:
   | PolarBearSceneData
   | WhaleSceneData
   | LemurSceneData
+  | TurtleSceneData
   | null = null;
 
 // Global Infinite Mode option state
@@ -114,6 +129,21 @@ const winState = window as unknown as {
     levelTimeSeconds: number;
     totalTimeSeconds: number;
     nextLevelData: LemurSceneData;
+  }) => void;
+  showTurtleImpactModal: (payload: {
+    won: boolean;
+    deathReason?: 'exhaustion' | 'predator';
+    level: number;
+    levelTargetMeters: number;
+    metersInLevel: number;
+    totalMetersMigrated: number;
+    nextLevelMeters: number;
+    predatorsEvaded: number;
+    kelpCollected: number;
+    burrowsUsed: number;
+    levelTimeSeconds: number;
+    totalTimeSeconds: number;
+    nextLevelData: TurtleSceneData;
   }) => void;
 };
 winState.wildSpacesInfiniteMode = false;
@@ -281,7 +311,12 @@ interface EpisodeImpactModalDescriptor {
   titleText: string;
   summaryText: string;
   nextButtonLabel?: string;
-  nextLevelData: PolarBearSceneData | WhaleSceneData | LemurSceneData | null;
+  nextLevelData:
+    | PolarBearSceneData
+    | WhaleSceneData
+    | LemurSceneData
+    | TurtleSceneData
+    | null;
   totalMetersMigrated: number;
   stat2Value: string;
   stat2Label: string;
@@ -479,6 +514,47 @@ winState.showLemurImpactModal = (payload) => {
   });
 };
 
+// Expose impact modal hook for Episode 4 (TurtleScene)
+winState.showTurtleImpactModal = (payload) => {
+  openEpisodeImpactModal({
+    episodeId: 'TurtleScene',
+    episodeLabel: 'Sea Turtle',
+    level: payload.level,
+    won: payload.won,
+    tagText: payload.won
+      ? `Episode 4 • Level ${payload.level} Complete`
+      : payload.deathReason === 'predator'
+      ? `Seabird Ambush • Level ${payload.level}`
+      : `Disoriented Before Surf • Level ${payload.level}`,
+    titleText: payload.won
+      ? 'Reached the Moonlit Ocean Surf'
+      : payload.deathReason === 'predator'
+      ? 'Captured on Open Moonlit Sand'
+      : 'Exhausted Before Reaching the Surf',
+    summaryText: payload.won
+      ? `Dodging coastal floodlights and diving predators with well-timed sand burrows (${payload.burrowsUsed} used), you crossed ${payload.levelTargetMeters}m in ${formatDuration(
+          payload.levelTimeSeconds
+        )} to reach the surf. Continue into Level ${
+          payload.level + 1
+        } (${payload.nextLevelMeters}m) where resort floodlights sweep wider and cool kelp is scarcer!`
+      : payload.deathReason === 'predator'
+      ? `Artificial coastal glare illuminates hatchlings across open sand, drawing swooping seabirds from above. Use driftwood shadows or hold SPACE to burrow before predators strike (${payload.totalMetersMigrated}m total progress).`
+      : `You crawled ${payload.metersInLevel}m / ${payload.levelTargetMeters}m on Level ${payload.level} (${payload.totalMetersMigrated}m total) before resort glare, plastic debris drag, and ghost crabs exhausted your yolk-sac reserves.`,
+    nextButtonLabel: `Next Hatchling Dash (Level ${payload.level + 1} • ${payload.nextLevelMeters}m →)`,
+    nextLevelData: payload.nextLevelData,
+    totalMetersMigrated: payload.totalMetersMigrated,
+    stat2Value: `${payload.predatorsEvaded}`,
+    stat2Label: 'Predators Evaded',
+    stat3Value: `${payload.kelpCollected}`,
+    stat3Label: 'Cool Kelp Rests',
+    levelTimeSeconds: payload.levelTimeSeconds,
+    totalTimeSeconds: payload.totalTimeSeconds,
+    factHeading: 'Coastal Light Pollution & Hatchling Crisis',
+    factBody:
+      'Newly hatched sea turtles navigate toward the brightest natural horizon, the moonlit ocean, within minutes of emerging from their nest. Beachfront hotel lighting, streetlamps, plastic litter, and warming sands disorient millions of hatchlings inland each year, leaving roughly 1 in 1,000 able to survive to adulthood.',
+  });
+};
+
 // Impact modal buttons
 document.getElementById('btn-impact-retry')?.addEventListener('click', () => {
   impactModal.classList.remove('active');
@@ -568,6 +644,10 @@ document.getElementById('btn-leaderboard')?.addEventListener('click', () => {
       'LemurScene',
       'Episode 3 • Fractured Canopy (Ring-Tailed Lemur)'
     )}
+    ${renderEpisodeSection(
+      'TurtleScene',
+      'Episode 4 • False Horizon (Loggerhead Sea Turtle)'
+    )}
   `;
 
   openInfoModal();
@@ -616,6 +696,11 @@ document.getElementById('btn-artist-spec')?.addEventListener('click', () => {
       assets: LEMUR_ASSETS,
       folder: 'public/assets/lemur/',
       briefLabel: 'Artist Commission Brief (Episode 3 • Ring-Tailed Lemur)',
+    },
+    TurtleScene: {
+      assets: TURTLE_ASSETS,
+      folder: 'public/assets/turtle/',
+      briefLabel: 'Artist Commission Brief (Episode 4 • Sea Turtle)',
     },
   };
 

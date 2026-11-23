@@ -1,4 +1,8 @@
-export type PlayableEpisodeId = 'PolarBearScene' | 'WhaleScene' | 'LemurScene';
+export type PlayableEpisodeId =
+  | 'PolarBearScene'
+  | 'WhaleScene'
+  | 'LemurScene'
+  | 'TurtleScene';
 
 export interface ActiveGameSession {
   episodeId: PlayableEpisodeId;
@@ -11,6 +15,7 @@ const VALID_EPISODE_IDS: ReadonlySet<string> = new Set<PlayableEpisodeId>([
   'PolarBearScene',
   'WhaleScene',
   'LemurScene',
+  'TurtleScene',
 ]);
 
 function getStorage(): Storage | undefined {
