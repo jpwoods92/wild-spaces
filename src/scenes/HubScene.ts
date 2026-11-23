@@ -29,7 +29,7 @@ const EPISODES: EpisodeCard[] = [
     id: 'WhaleScene',
     region: 'NORTH ATLANTIC OCEAN',
     title: '02 • Drowned Echoes',
-    species: 'North Atlantic Right Whale',
+    species: 'North Atlantic Right Whale (Eubalaena glacialis)',
     status: 'CRITICALLY ENDANGERED — <360 remaining',
     mechanicSummary:
       'Press SPACE to sing and follow your calf’s echo through dark water. Commercial shipping lanes, ghost fishing gear & seismic sonar flood the sea with blinding noise.',
