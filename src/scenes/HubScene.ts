@@ -59,7 +59,7 @@ const EPISODES: EpisodeCard[] = [
     scientificName: 'Caretta caretta',
     status: 'VULNERABLE: 1 in 1,000 reach adulthood',
     mechanicSummary:
-      'Crawl from your dune nest to the moonlit surf. Hold SPACE to burrow under sand as seabirds dive and ghost crabs prowl, while resisting resort light pull and plastic debris.',
+      'Crawl from your dune nest to the moonlit surf. Hold SPACE to burrow, hide, and recover stamina while avoiding crabs, birds, and blinding spotlights.',
     playable: true,
     accentColor: 0xf59e0b,
   },

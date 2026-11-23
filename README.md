@@ -11,7 +11,7 @@ Built with [Phaser 3](https://phaser.io/), TypeScript and Vite.
 | 01 | The Thinning North | Beaufort Sea, Arctic | Polar Bear | Migrate north across cracking, shrinking ice floes and hunt seals to keep stamina up while crossing open water and shipping lanes. |
 | 02 | Drowned Echoes | North Atlantic Ocean | North Atlantic Right Whale | Sing to reveal food, nets and your calf's bearing while shipping lanes, ghost fishing gear and seismic sonar drown out your call. |
 | 03 | Fractured Canopy | Spiny Forest, Madagascar | Ring-Tailed Lemur | Charge and aim leaps from tree to tree ahead of a slash-and-burn fire wall, avoiding fossas, logging trucks and rival lemurs. |
-| 04 | False Horizon | Atlantic Nesting Beach | Loggerhead Sea Turtle | Crawl north from your dune nest to the moonlit surf. Hold SPACE to burrow under sand while avoiding diving seabirds, ghost crabs, resort glare and plastic debris. |
+| 04 | False Horizon | Atlantic Nesting Beach | Loggerhead Sea Turtle | Crawl north from your dune nest to the moonlit surf. Hold SPACE to burrow under sand to hide and recover stamina while dodging seabirds, ghost crabs, plastic debris and blinding moving spotlights. |
 
 Levels get harder as you progress, and each episode keeps a local leaderboard of your best completion times.
 
@@ -20,7 +20,7 @@ Levels get harder as you progress, and each episode keeps a local leaderboard of
 | Action | Polar Bear | Whale | Lemur | Sea Turtle |
 |--------|------------|-------|-------|------------|
 | Move | WASD / Arrows | WASD / Arrows | WASD / Arrows | WASD / Arrows |
-| Ability | SPACE / SHIFT: Lunge (1.4s cooldown) | SPACE: Sing (cooldown) | Hold SPACE / SHIFT: Charge leap, release to jump (1.1s cooldown after landing) | Hold SPACE / SHIFT: Burrow under sand (1.6s cooldown) |
+| Ability | SPACE / SHIFT: Lunge (1.4s cooldown) | SPACE: Sing (cooldown) | Hold SPACE / SHIFT: Charge leap, release to jump (1.1s cooldown after landing) | Hold SPACE / SHIFT: Burrow under sand (1.6s cooldown, recovers stamina) |
 | Pause | P / ESC | P / ESC | P / ESC | P / ESC |
 
 Loading the app takes you to the Habitat Map, unless you have a game in progress, in which case it resumes.

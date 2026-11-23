@@ -16,10 +16,16 @@ import { AbilityCooldown } from '../utils/AbilityCooldown';
 import {
   computeBirdDetectRadius,
   computeLightPollutionPull,
+  computeSpotlightPosition,
+  computeTurtlePredatorCounts,
   doesBirdDiveHit,
+  getPredatorVisibilityAlpha,
   isPointInShade,
   LightPool,
+  recoverBurrowedStamina,
   ShadeZone,
+  SweepingSpotlight,
+  updateBlindnessTimer,
 } from '../utils/BeachStealth';
 import {
   EpisodeUIManager,
@@ -30,11 +36,7 @@ import { globalPauseManager } from '../systems/PauseManager';
 interface ResortLight {
   fixtureX: number;
   fixtureY: number;
-  basePoolX: number;
-  basePoolY: number;
-  sweepAmp: number;
-  sweepSpeed: number;
-  sweepPhase: number;
+  motion: SweepingSpotlight;
   pool: LightPool;
 }
 
@@ -73,9 +75,11 @@ interface GhostCrab {
   patrolSpeed: number;
   wasChasing: boolean;
   attackCooldown: number;
+  alive: boolean;
 }
 
 type SeabirdState = 'patrol' | 'telegraph' | 'dive' | 'recover';
+type SeabirdTargetKind = 'player' | 'sibling' | 'crab';
 
 interface Seabird {
   sprite: Phaser.GameObjects.Image;
@@ -89,11 +93,13 @@ interface Seabird {
   state: SeabirdState;
   stateTimer: number;
   telegraphDuration: number;
+  recoverDuration: number;
   strikeX: number;
   strikeY: number;
   diveStartX: number;
   diveStartY: number;
   baseDetectRadius: number;
+  targetKind: SeabirdTargetKind;
 }
 
 interface SiblingHatchling {
@@ -103,6 +109,10 @@ interface SiblingHatchling {
   speed: number;
   startDelay: number;
   wobblePhase: number;
+  isBurrowed: boolean;
+  burrowTimer: number;
+  burrowCooldown: number;
+  eaten: boolean;
   active: boolean;
 }
 
@@ -159,6 +169,7 @@ export class TurtleScene extends Phaser.Scene {
   private currentGlare = 0;
   private currentPullX = 0;
   private currentPullY = 0;
+  private blindnessTimer = 0;
   private lightWarnCooldown = 0;
   private snareWarnCooldown = 0;
 
@@ -175,6 +186,7 @@ export class TurtleScene extends Phaser.Scene {
   private surfGraphics!: Phaser.GameObjects.Graphics;
   private lightGraphics!: Phaser.GameObjects.Graphics;
   private birdOverlayGraphics!: Phaser.GameObjects.Graphics;
+  private blindOverlayGraphics!: Phaser.GameObjects.Graphics;
   private trackGraphics!: Phaser.GameObjects.Graphics;
   private sandTracks: SandTrackPoint[] = [];
   private trackDropTimer = 0;
@@ -251,6 +263,10 @@ export class TurtleScene extends Phaser.Scene {
     this.lightGraphics = this.add.graphics().setDepth(8);
     this.birdOverlayGraphics = this.add.graphics().setDepth(14);
     this.surfGraphics = this.add.graphics().setDepth(12);
+    this.blindOverlayGraphics = this.add
+      .graphics()
+      .setScrollFactor(0)
+      .setDepth(94);
 
     // 3. Populate Lights, Driftwood Shade, Plastic Snares, Wet Kelp, Predators & Siblings
     this.spawnBeachHabitatAndHazards();
@@ -301,7 +317,7 @@ export class TurtleScene extends Phaser.Scene {
       accentColor: 0xf59e0b,
       accentHex: '#f59e0b',
       bottomHint:
-        'WASD / Arrows: Crawl  •  Hold SPACE: Burrow & Hide  •  Avoid Lights & Predators  •  P / ESC: Pause',
+        'WASD / Arrows: Crawl  •  Hold SPACE: Burrow (Hide & Recover Stamina)  •  Avoid Blinding Spotlights  •  P / ESC: Pause',
       autoFadeHintMs: 6500,
       worldUiYOffset: 54,
       worldBarWidth: 74,
@@ -352,6 +368,7 @@ export class TurtleScene extends Phaser.Scene {
     this.currentGlare = 0;
     this.currentPullX = 0;
     this.currentPullY = 0;
+    this.blindnessTimer = 0;
     this.lightWarnCooldown = 0;
     this.snareWarnCooldown = 0;
     this.gameEnded = false;
@@ -548,9 +565,9 @@ export class TurtleScene extends Phaser.Scene {
       const ly = Math.round(minY + spanY * frac);
       const isLeftSide = i % 2 === 0;
       const fixtureX = isLeftSide ? 64 : this.WORLD_WIDTH - 64;
-      const reachX = isLeftSide
-        ? Phaser.Math.Between(310, 560)
-        : Phaser.Math.Between(this.WORLD_WIDTH - 560, this.WORLD_WIDTH - 310);
+      const baseX = isLeftSide
+        ? Phaser.Math.Between(420, 660)
+        : Phaser.Math.Between(this.WORLD_WIDTH - 660, this.WORLD_WIDTH - 420);
       const radius = Math.min(440, 270 + (this.level - 1) * 22);
       const strength = Math.min(108, 72 + (this.level - 1) * 6);
 
@@ -561,19 +578,29 @@ export class TurtleScene extends Phaser.Scene {
       lamp.fillStyle(0xfef08a, 0.95);
       lamp.fillCircle(fixtureX, ly, 6);
 
-      const sweepAmp = this.level >= 2 ? 45 + Math.min(55, (this.level - 2) * 14) : 0;
+      const motion: SweepingSpotlight = {
+        baseX,
+        baseY: ly,
+        ampX: 210 + Math.min(180, (this.level - 1) * 32),
+        ampY: 120 + Math.min(110, (this.level - 1) * 20),
+        speedX: 0.65 + (i % 3) * 0.22 + Math.min(0.45, (this.level - 1) * 0.08),
+        speedY:
+          0.45 + ((i + 1) % 3) * 0.18 + Math.min(0.35, (this.level - 1) * 0.06),
+        phase: i * 1.45,
+      };
+      const initialPos = computeSpotlightPosition(motion, 0);
 
       this.resortLights.push({
         fixtureX,
         fixtureY: ly,
-        basePoolX: reachX,
-        basePoolY: ly,
-        sweepAmp,
-        sweepSpeed: 0.7 + (i % 3) * 0.2,
-        sweepPhase: i * 1.4,
+        motion,
         pool: {
-          x: reachX,
-          y: ly,
+          x: Phaser.Math.Clamp(initialPos.x, 130, this.WORLD_WIDTH - 130),
+          y: Phaser.Math.Clamp(
+            initialPos.y,
+            this.SURF_Y + 180,
+            this.worldHeight - 80
+          ),
           radius,
           strength,
           sourceX: fixtureX,
@@ -582,18 +609,24 @@ export class TurtleScene extends Phaser.Scene {
       });
     }
 
-    // Southern beachfront promenade glare behind the nesting dune
+    // Southern beachfront promenade spotlight sweeping behind the nesting dune
+    const southMotion: SweepingSpotlight = {
+      baseX: this.WORLD_WIDTH / 2,
+      baseY: this.startY + 135,
+      ampX: 260,
+      ampY: 30,
+      speedX: 0.55,
+      speedY: 0.35,
+      phase: 0.6,
+    };
+    const southInitial = computeSpotlightPosition(southMotion, 0);
     this.resortLights.push({
       fixtureX: this.WORLD_WIDTH / 2,
       fixtureY: this.startY + 280,
-      basePoolX: this.WORLD_WIDTH / 2,
-      basePoolY: this.startY + 135,
-      sweepAmp: 0,
-      sweepSpeed: 0,
-      sweepPhase: 0,
+      motion: southMotion,
       pool: {
-        x: this.WORLD_WIDTH / 2,
-        y: this.startY + 135,
+        x: southInitial.x,
+        y: southInitial.y,
         radius: 220,
         strength: 62,
         sourceX: this.WORLD_WIDTH / 2,
@@ -603,15 +636,15 @@ export class TurtleScene extends Phaser.Scene {
   }
 
   private spawnGhostCrabs(): void {
-    const crabCount = Math.min(16, 4 + (this.level - 1) * 2);
-    const minY = this.SURF_Y + 190;
-    const maxY = this.startY - 220;
+    const { crabCount } = computeTurtlePredatorCounts(this.level);
+    const minY = this.SURF_Y + 170;
+    const maxY = this.startY - 190;
     const spanY = Math.max(300, maxY - minY);
 
     for (let i = 0; i < crabCount; i++) {
       const frac = (i + 0.5) / crabCount;
-      const cy = Math.round(minY + spanY * frac + Phaser.Math.Between(-35, 35));
-      const cx = Phaser.Math.Between(240, this.WORLD_WIDTH - 240);
+      const cy = Math.round(minY + spanY * frac + Phaser.Math.Between(-45, 45));
+      const cx = Phaser.Math.Between(180, this.WORLD_WIDTH - 180);
 
       const sprite = this.add
         .image(cx, cy, 'ghost_crab')
@@ -627,28 +660,29 @@ export class TurtleScene extends Phaser.Scene {
         patrolAnchorX: cx,
         patrolAnchorY: cy,
         patrolDir: i % 2 === 0 ? 1 : -1,
-        patrolSpan: Phaser.Math.Between(160, 260),
-        patrolSpeed: Math.min(115, 68 + (this.level - 1) * 8),
-        chaseSpeed: Math.min(172, 114 + (this.level - 1) * 11),
+        patrolSpan: Phaser.Math.Between(160, 280),
+        patrolSpeed: Math.min(125, 68 + (this.level - 1) * 9),
+        chaseSpeed: Math.min(182, 114 + (this.level - 1) * 12),
         wasChasing: false,
         attackCooldown: 0,
+        alive: true,
       });
     }
   }
 
   private spawnSeabirds(): void {
-    const birdCount = Math.min(7, 2 + Math.floor((this.level - 1) * 1.2));
-    const minY = this.SURF_Y + 280;
-    const maxY = this.startY - 260;
+    const { birdCount } = computeTurtlePredatorCounts(this.level);
+    const minY = this.SURF_Y + 230;
+    const maxY = this.startY - 220;
     const spanY = Math.max(320, maxY - minY);
+    const telegraphDuration = Math.max(0.68, 1.12 - (this.level - 1) * 0.06);
+    const recoverDuration = Math.max(1.25, 2.2 - (this.level - 1) * 0.14);
 
     for (let i = 0; i < birdCount; i++) {
       const frac = (i + 0.5) / birdCount;
       const ay = Math.round(minY + spanY * frac);
-      const ax =
-        this.WORLD_WIDTH / 2 +
-        Phaser.Math.Between(-420, 420);
-      const orbitRadius = Phaser.Math.Between(150, 240);
+      const ax = Phaser.Math.Between(260, this.WORLD_WIDTH - 260);
+      const orbitRadius = Phaser.Math.Between(150, 260);
       const orbitAngle = i * 1.9;
       const bx = ax + Math.cos(orbitAngle) * orbitRadius;
       const by = ay + Math.sin(orbitAngle) * orbitRadius;
@@ -667,23 +701,36 @@ export class TurtleScene extends Phaser.Scene {
         y: by,
         orbitAngle,
         orbitRadius,
-        orbitSpeed: (i % 2 === 0 ? 1 : -1) * (0.75 + (this.level - 1) * 0.07),
+        orbitSpeed:
+          (i % 2 === 0 ? 1 : -1) * (0.78 + Math.min(0.65, (this.level - 1) * 0.09)),
         state: 'patrol',
         stateTimer: 0,
-        telegraphDuration: Math.max(0.75, 1.12 - (this.level - 1) * 0.06),
+        telegraphDuration,
+        recoverDuration,
         strikeX: bx,
         strikeY: by,
         diveStartX: bx,
         diveStartY: by,
         baseDetectRadius: 235,
+        targetKind: 'player',
       });
     }
   }
 
   private spawnSiblingHatchlings(): void {
-    for (let i = 0; i < 7; i++) {
-      const sx = this.WORLD_WIDTH / 2 + Phaser.Math.Between(-46, 46);
-      const sy = this.startY + Phaser.Math.Between(-16, 18);
+    const siblingCount = 10 + Math.min(8, (this.level - 1) * 2);
+    for (let i = 0; i < siblingCount; i++) {
+      const fromNest = i < 8;
+      const sx = fromNest
+        ? this.WORLD_WIDTH / 2 + Phaser.Math.Between(-56, 56)
+        : Phaser.Math.Between(360, this.WORLD_WIDTH - 360);
+      const sy = fromNest
+        ? this.startY + Phaser.Math.Between(-16, 18)
+        : Phaser.Math.Between(
+            Math.max(this.SURF_Y + 340, this.startY - 780),
+            this.startY - 120
+          );
+
       const sprite = this.add
         .image(sx, sy, 'turtle_crawl')
         .setDepth(17)
@@ -696,9 +743,13 @@ export class TurtleScene extends Phaser.Scene {
         sprite,
         x: sx,
         y: sy,
-        speed: Phaser.Math.FloatBetween(82, 114),
-        startDelay: i * 0.22,
+        speed: Phaser.Math.FloatBetween(82, 116),
+        startDelay: fromNest ? i * 0.2 : 0,
         wobblePhase: i * 1.3,
+        isBurrowed: false,
+        burrowTimer: 0,
+        burrowCooldown: 0,
+        eaten: false,
         active: true,
       });
     }
@@ -710,35 +761,40 @@ export class TurtleScene extends Phaser.Scene {
     const dt = Math.min(deltaMs / 1000, 0.05);
     this.levelElapsedSeconds += dt;
 
-    // 1. Animate sweeping resort light pools before stealth/pull checks
-    this.updateResortLights(dt);
+    // 1. Move resort spotlights in 2D before stealth/pull/blindness checks
+    this.updateResortLights();
 
     // 2. Player movement, shade check, light pull & Burrow stealth
     this.updateTurtleMovement(dt);
 
-    // 3. Survival stamina drains & cool kelp / plastic debris overlaps
+    // 3. Burrow stamina recovery, blindness timer & cool kelp / plastic debris overlaps
     this.updateSurvivalAndEnvironment(dt);
 
-    // 4. Predators & atmospheric siblings
+    // 4. Ecosystem: sibling evasion, ghost crabs & swooping seabirds
+    this.updateSiblingHatchlings(dt);
     this.updateGhostCrabs(dt);
     this.updateSeabirds(dt);
-    this.updateSiblingHatchlings(dt);
 
     // 5. Win / Loss evaluation
     this.checkWinLoss();
 
-    // 6. Visuals, Light Cones, Surf Waves, Bird Telegraphs & HUD
+    // 6. Visuals, Light Cones, Surf Waves, Blindness Veil, Bird Telegraphs & HUD
     this.renderNightVisuals(dt);
     this.renderHUD();
   }
 
-  private updateResortLights(dt: number): void {
+  private updateResortLights(): void {
     for (const light of this.resortLights) {
-      if (light.sweepAmp > 0) {
-        light.sweepPhase += dt * light.sweepSpeed;
-        light.pool.x =
-          light.basePoolX + Math.sin(light.sweepPhase) * light.sweepAmp;
-      }
+      const next = computeSpotlightPosition(
+        light.motion,
+        this.levelElapsedSeconds
+      );
+      light.pool.x = Phaser.Math.Clamp(next.x, 130, this.WORLD_WIDTH - 130);
+      light.pool.y = Phaser.Math.Clamp(
+        next.y,
+        this.SURF_Y + 180,
+        this.worldHeight - 80
+      );
     }
   }
 
@@ -892,14 +948,37 @@ export class TurtleScene extends Phaser.Scene {
     this.lightWarnCooldown = Math.max(0, this.lightWarnCooldown - dt);
     this.snareWarnCooldown = Math.max(0, this.snareWarnCooldown - dt);
 
-    const nearSurf = this.turtleY <= this.SURF_Y + 260;
-    let drainRate = this.isBurrowed
-      ? 3.2
-      : nearSurf
-      ? 2.0
-      : 3.6;
+    // Update spotlight blindness timer (only refreshes when exposed in glare)
+    const wasBlinded = this.blindnessTimer > 0.15;
+    this.blindnessTimer = updateBlindnessTimer(
+      this.blindnessTimer,
+      this.currentGlare,
+      this.isBurrowed,
+      this.inShade,
+      dt
+    );
+    if (!wasBlinded && this.blindnessTimer > 0.5 && this.lightWarnCooldown <= 0) {
+      this.lightWarnCooldown = 3.2;
+      this.uiManager.spawnFloatingNotice(
+        this.turtleX,
+        this.turtleY - 26,
+        'BLINDED BY SPOTLIGHT! PREDATORS HIDDEN',
+        '#fef08a'
+      );
+    }
 
-    if (!this.isBurrowed) {
+    if (this.isBurrowed) {
+      // Recover stamina while safely tucked inside cool sand
+      this.stamina = recoverBurrowedStamina(
+        this.stamina,
+        this.maxStamina,
+        dt,
+        18
+      );
+    } else {
+      const nearSurf = this.turtleY <= this.SURF_Y + 260;
+      let drainRate = nearSurf ? 2.0 : 3.6;
+
       if (this.currentGlare > 0.25) {
         drainRate += 3.0 * this.currentGlare;
         this.maxStamina = Math.max(20, this.maxStamina - 0.7 * dt);
@@ -926,12 +1005,10 @@ export class TurtleScene extends Phaser.Scene {
           );
         }
       }
-    }
 
-    this.stamina = Math.max(0, this.stamina - drainRate * dt);
+      this.stamina = Math.max(0, this.stamina - drainRate * dt);
 
-    // Hydrate at cool damp kelp patches when unburrowed
-    if (!this.isBurrowed) {
+      // Hydrate at cool damp kelp patches when unburrowed
       for (const kelp of this.wetKelps) {
         if (kelp.collected) continue;
         if (
@@ -964,6 +1041,7 @@ export class TurtleScene extends Phaser.Scene {
   }
 
   private updateGhostCrabs(dt: number): void {
+    const predatorVis = getPredatorVisibilityAlpha(this.blindnessTimer);
     const crabDetectRange = this.isBurrowed
       ? 0
       : this.inShade
@@ -971,6 +1049,11 @@ export class TurtleScene extends Phaser.Scene {
       : 190 + this.currentGlare * 75;
 
     for (const crab of this.ghostCrabs) {
+      if (!crab.alive) continue;
+
+      crab.sprite.setAlpha(predatorVis);
+      crab.sprite.setVisible(predatorVis > 0.01);
+
       if (crab.attackCooldown > 0) {
         crab.attackCooldown = Math.max(0, crab.attackCooldown - dt);
       }
@@ -985,7 +1068,34 @@ export class TurtleScene extends Phaser.Scene {
       let desiredVx = 0;
       let desiredVy = 0;
 
-      if (crabDetectRange > 0 && distToTurtle < crabDetectRange) {
+      // Dodge diving seabirds so crabs try to avoid getting eaten too
+      let dodgingBird: Seabird | null = null;
+      let bestBirdDist = 120;
+      for (const bird of this.seabirds) {
+        if (bird.state !== 'telegraph' && bird.state !== 'dive') continue;
+        const dBird = Phaser.Math.Distance.Between(
+          crab.x,
+          crab.y,
+          bird.strikeX,
+          bird.strikeY
+        );
+        if (dBird < bestBirdDist) {
+          bestBirdDist = dBird;
+          dodgingBird = bird;
+        }
+      }
+
+      if (dodgingBird) {
+        crab.wasChasing = false;
+        const awayAngle = Phaser.Math.Angle.Between(
+          dodgingBird.strikeX,
+          dodgingBird.strikeY,
+          crab.x,
+          crab.y
+        );
+        desiredVx = Math.cos(awayAngle) * crab.chaseSpeed;
+        desiredVy = Math.sin(awayAngle) * crab.chaseSpeed;
+      } else if (crabDetectRange > 0 && distToTurtle < crabDetectRange) {
         crab.wasChasing = true;
         const angle = Phaser.Math.Angle.Between(
           crab.x,
@@ -1010,19 +1120,68 @@ export class TurtleScene extends Phaser.Scene {
           crab.wasChasing = false;
         }
 
-        // Lateral beach patrol near anchor
-        if (crab.x > crab.patrolAnchorX + crab.patrolSpan) {
-          crab.patrolDir = -1;
-        } else if (crab.x < crab.patrolAnchorX - crab.patrolSpan) {
-          crab.patrolDir = 1;
+        // Hunt nearby unburrowed sibling hatchlings if player is out of reach
+        let targetSib: SiblingHatchling | null = null;
+        let bestSibDist = 210;
+        if (crab.attackCooldown <= 0) {
+          for (const sib of this.siblings) {
+            if (!sib.active || sib.eaten || sib.isBurrowed || sib.startDelay > 0) {
+              continue;
+            }
+            const dSib = Phaser.Math.Distance.Between(crab.x, crab.y, sib.x, sib.y);
+            const sibInShade = isPointInShade(sib.x, sib.y, this.shadeZones);
+            const maxRange = sibInShade ? 105 : 210;
+            if (dSib < maxRange && dSib < bestSibDist) {
+              bestSibDist = dSib;
+              targetSib = sib;
+            }
+          }
         }
-        const dyReturn = Phaser.Math.Clamp(
-          (crab.patrolAnchorY - crab.y) * 0.8,
-          -45,
-          45
-        );
-        desiredVx = crab.patrolDir * crab.patrolSpeed;
-        desiredVy = dyReturn;
+
+        if (targetSib) {
+          if (bestSibDist < 26) {
+            targetSib.active = false;
+            targetSib.eaten = true;
+            crab.attackCooldown = 1.4;
+            this.tweens.add({
+              targets: targetSib.sprite,
+              alpha: 0,
+              scale: 0.35,
+              duration: 280,
+            });
+            if (distToTurtle < 420 && predatorVis > 0.3) {
+              this.uiManager.spawnFloatingNotice(
+                targetSib.x,
+                targetSib.y - 18,
+                'SIBLING CAUGHT BY CRAB',
+                '#fb923c'
+              );
+            }
+          } else {
+            const sibAngle = Phaser.Math.Angle.Between(
+              crab.x,
+              crab.y,
+              targetSib.x,
+              targetSib.y
+            );
+            desiredVx = Math.cos(sibAngle) * crab.chaseSpeed * 0.92;
+            desiredVy = Math.sin(sibAngle) * crab.chaseSpeed * 0.92;
+          }
+        } else {
+          // Lateral beach patrol near anchor
+          if (crab.x > crab.patrolAnchorX + crab.patrolSpan) {
+            crab.patrolDir = -1;
+          } else if (crab.x < crab.patrolAnchorX - crab.patrolSpan) {
+            crab.patrolDir = 1;
+          }
+          const dyReturn = Phaser.Math.Clamp(
+            (crab.patrolAnchorY - crab.y) * 0.8,
+            -45,
+            45
+          );
+          desiredVx = crab.patrolDir * crab.patrolSpeed;
+          desiredVy = dyReturn;
+        }
       }
 
       const steered = resolveCircleObstacleMovement(
@@ -1080,8 +1239,14 @@ export class TurtleScene extends Phaser.Scene {
   }
 
   private updateSeabirds(dt: number): void {
+    const predatorVis = getPredatorVisibilityAlpha(this.blindnessTimer);
+    const activePools = this.resortLights.map((l) => l.pool);
     const canSpotHatchling =
       this.turtleY > this.SURF_Y + 90 && this.turtleY < this.startY - 120;
+    const aliveCrabCount = this.ghostCrabs.reduce(
+      (acc, c) => acc + (c.alive ? 1 : 0),
+      0
+    );
 
     for (const bird of this.seabirds) {
       if (bird.state === 'patrol') {
@@ -1090,11 +1255,13 @@ export class TurtleScene extends Phaser.Scene {
         bird.y = bird.anchorY + Math.sin(bird.orbitAngle) * bird.orbitRadius;
         bird.sprite.setPosition(bird.x, bird.y);
         bird.sprite.setScale(1);
-        bird.sprite.setAlpha(0.75);
+        bird.sprite.setAlpha(0.75 * predatorVis);
+        bird.sprite.setVisible(predatorVis > 0.01);
         bird.sprite.setRotation(
           bird.orbitAngle + (bird.orbitSpeed >= 0 ? Math.PI / 2 : -Math.PI / 2)
         );
 
+        let lockedTarget = false;
         const detectR = computeBirdDetectRadius(
           bird.baseDetectRadius,
           this.currentGlare,
@@ -1111,8 +1278,91 @@ export class TurtleScene extends Phaser.Scene {
           if (dist < detectR) {
             bird.state = 'telegraph';
             bird.stateTimer = bird.telegraphDuration;
+            bird.targetKind = 'player';
             bird.strikeX = this.turtleX;
             bird.strikeY = this.turtleY;
+            bird.diveStartX = bird.x;
+            bird.diveStartY = bird.y;
+            lockedTarget = true;
+          }
+        }
+
+        // Also hunt exposed siblings across open beach
+        if (!lockedTarget) {
+          let bestSib: SiblingHatchling | null = null;
+          let bestDist = Infinity;
+          for (const sib of this.siblings) {
+            if (
+              !sib.active ||
+              sib.eaten ||
+              sib.isBurrowed ||
+              sib.startDelay > 0 ||
+              sib.y <= this.SURF_Y + 70 ||
+              sib.y >= this.startY - 90
+            ) {
+              continue;
+            }
+            if (isPointInShade(sib.x, sib.y, this.shadeZones)) continue;
+            const sibGlare = computeLightPollutionPull(
+              sib.x,
+              sib.y,
+              activePools,
+              false
+            ).glare;
+            const sibDetectR = bird.baseDetectRadius + sibGlare * 120;
+            const dSib = Phaser.Math.Distance.Between(
+              bird.x,
+              bird.y,
+              sib.x,
+              sib.y
+            );
+            if (dSib < sibDetectR && dSib < bestDist) {
+              bestDist = dSib;
+              bestSib = sib;
+            }
+          }
+          if (bestSib) {
+            bird.state = 'telegraph';
+            bird.stateTimer = bird.telegraphDuration;
+            bird.targetKind = 'sibling';
+            bird.strikeX = bestSib.x;
+            bird.strikeY = bestSib.y;
+            bird.diveStartX = bird.x;
+            bird.diveStartY = bird.y;
+            lockedTarget = true;
+          }
+        }
+
+        // Occasionally swoop on exposed ghost crabs if surplus crabs remain
+        if (!lockedTarget && aliveCrabCount > 4) {
+          let bestCrab: GhostCrab | null = null;
+          let bestDist = 170;
+          for (const crab of this.ghostCrabs) {
+            if (
+              !crab.alive ||
+              crab.y <= this.SURF_Y + 90 ||
+              crab.y >= this.startY - 120 ||
+              isPointInShade(crab.x, crab.y, this.shadeZones)
+            ) {
+              continue;
+            }
+            const dCrab = Phaser.Math.Distance.Between(
+              bird.x,
+              bird.y,
+              crab.x,
+              crab.y
+            );
+            if (dCrab < bestDist) {
+              bestDist = dCrab;
+              bestCrab = crab;
+            }
+          }
+          if (bestCrab) {
+            bird.state = 'telegraph';
+            bird.stateTimer = bird.telegraphDuration;
+            bird.targetKind = 'crab';
+            bird.strikeX = bestCrab.x;
+            bird.strikeY = bestCrab.y;
             bird.diveStartX = bird.x;
             bird.diveStartY = bird.y;
           }
@@ -1131,7 +1381,8 @@ export class TurtleScene extends Phaser.Scene {
           bird.strikeY
         );
         bird.sprite.setRotation(angleToTarget);
-        bird.sprite.setAlpha(0.88);
+        bird.sprite.setAlpha(0.88 * predatorVis);
+        bird.sprite.setVisible(predatorVis > 0.01);
         bird.sprite.setScale(1 + progress * 0.14);
 
         if (bird.stateTimer <= 0) {
@@ -1146,7 +1397,8 @@ export class TurtleScene extends Phaser.Scene {
         bird.x = Phaser.Math.Linear(bird.diveStartX, bird.strikeX, t);
         bird.y = Phaser.Math.Linear(bird.diveStartY, bird.strikeY, t);
         bird.sprite.setPosition(bird.x, bird.y);
-        bird.sprite.setAlpha(0.98);
+        bird.sprite.setAlpha(0.98 * predatorVis);
+        bird.sprite.setVisible(predatorVis > 0.01);
         bird.sprite.setScale(1.16 - t * 0.28);
 
         if (bird.stateTimer <= 0) {
@@ -1174,7 +1426,105 @@ export class TurtleScene extends Phaser.Scene {
               this.triggerImpactOverlay(false, 'predator');
             });
             return;
-          } else {
+          }
+
+          let caughtPrey = false;
+
+          // Check if an exposed sibling was caught in the dive zone
+          for (const sib of this.siblings) {
+            if (!sib.active || sib.eaten || sib.isBurrowed || sib.startDelay > 0) {
+              continue;
+            }
+            if (isPointInShade(sib.x, sib.y, this.shadeZones)) continue;
+            if (
+              Phaser.Math.Distance.Between(
+                sib.x,
+                sib.y,
+                bird.strikeX,
+                bird.strikeY
+              ) <= 42
+            ) {
+              sib.active = false;
+              sib.eaten = true;
+              caughtPrey = true;
+              this.tweens.add({
+                targets: sib.sprite,
+                alpha: 0,
+                scale: 0.35,
+                duration: 280,
+              });
+              if (
+                Phaser.Math.Distance.Between(
+                  this.turtleX,
+                  this.turtleY,
+                  sib.x,
+                  sib.y
+                ) < 420 &&
+                predatorVis > 0.3
+              ) {
+                this.uiManager.spawnFloatingNotice(
+                  sib.x,
+                  sib.y - 20,
+                  'SEABIRD SNATCHED A SIBLING!',
+                  '#fb923c'
+                );
+              }
+              break;
+            }
+          }
+
+          // Otherwise check if an exposed ghost crab was caught
+          if (!caughtPrey && aliveCrabCount > 3) {
+            for (const crab of this.ghostCrabs) {
+              if (!crab.alive) continue;
+              if (isPointInShade(crab.x, crab.y, this.shadeZones)) continue;
+              if (
+                Phaser.Math.Distance.Between(
+                  crab.x,
+                  crab.y,
+                  bird.strikeX,
+                  bird.strikeY
+                ) <= 34
+              ) {
+                crab.alive = false;
+                caughtPrey = true;
+                this.tweens.add({
+                  targets: crab.sprite,
+                  alpha: 0,
+                  scale: 0.35,
+                  duration: 280,
+                });
+                if (
+                  Phaser.Math.Distance.Between(
+                    this.turtleX,
+                    this.turtleY,
+                    crab.x,
+                    crab.y
+                  ) < 420 &&
+                  predatorVis > 0.3
+                ) {
+                  this.uiManager.spawnFloatingNotice(
+                    crab.x,
+                    crab.y - 20,
+                    'SEABIRD SNATCHED A CRAB!',
+                    '#fde68a'
+                  );
+                }
+                break;
+              }
+            }
+          }
+
+          if (
+            !caughtPrey &&
+            (bird.targetKind === 'player' ||
+              Phaser.Math.Distance.Between(
+                this.turtleX,
+                this.turtleY,
+                bird.strikeX,
+                bird.strikeY
+              ) < 130)
+          ) {
             this.predatorsEvaded++;
             this.uiManager.spawnFloatingNotice(
               bird.strikeX,
@@ -1182,9 +1532,10 @@ export class TurtleScene extends Phaser.Scene {
               'SWOOP EVADED!',
               '#2dd4bf'
             );
-            bird.state = 'recover';
-            bird.stateTimer = 2.2;
           }
+
+          bird.state = 'recover';
+          bird.stateTimer = bird.recoverDuration;
         }
       } else {
         // Recover and climb back to orbit
@@ -1197,7 +1548,8 @@ export class TurtleScene extends Phaser.Scene {
         bird.y = Phaser.Math.Linear(bird.y, targetY, Math.min(1, dt * 1.8));
         bird.sprite.setPosition(bird.x, bird.y);
         bird.sprite.setScale(0.95);
-        bird.sprite.setAlpha(0.6);
+        bird.sprite.setAlpha(0.6 * predatorVis);
+        bird.sprite.setVisible(predatorVis > 0.01);
         bird.sprite.setRotation(
           Phaser.Math.Angle.Between(bird.x, bird.y, targetX, targetY)
         );
@@ -1211,10 +1563,65 @@ export class TurtleScene extends Phaser.Scene {
   private updateSiblingHatchlings(dt: number): void {
     const activePools = this.resortLights.map((l) => l.pool);
     for (const sib of this.siblings) {
-      if (!sib.active) continue;
+      if (!sib.active || sib.eaten) continue;
       if (sib.startDelay > 0) {
         sib.startDelay -= dt;
         continue;
+      }
+
+      if (sib.burrowCooldown > 0) {
+        sib.burrowCooldown = Math.max(0, sib.burrowCooldown - dt);
+      }
+
+      if (sib.isBurrowed) {
+        sib.burrowTimer -= dt;
+        if (sib.burrowTimer <= 0) {
+          sib.isBurrowed = false;
+          sib.burrowCooldown = 2.4;
+          sib.sprite.setTexture('turtle_crawl');
+        }
+        continue;
+      }
+
+      // Burrow cleanly to evade nearby diving seabirds
+      const threatenedByBird = this.seabirds.some(
+        (b) =>
+          (b.state === 'telegraph' || b.state === 'dive') &&
+          Phaser.Math.Distance.Between(sib.x, sib.y, b.strikeX, b.strikeY) < 115
+      );
+      if (threatenedByBird && sib.burrowCooldown <= 0) {
+        sib.isBurrowed = true;
+        sib.burrowTimer = 1.35;
+        sib.sprite.setTexture('turtle_burrow');
+        continue;
+      }
+
+      // Evade nearby patrolling/chasing ghost crabs
+      let fleeVx = 0;
+      let fleeVy = 0;
+      let closestCrabDist = 155;
+      let closestCrab: GhostCrab | null = null;
+      for (const crab of this.ghostCrabs) {
+        if (!crab.alive) continue;
+        const dCrab = Phaser.Math.Distance.Between(sib.x, sib.y, crab.x, crab.y);
+        if (dCrab < closestCrabDist) {
+          closestCrabDist = dCrab;
+          closestCrab = crab;
+        }
+      }
+
+      if (closestCrab) {
+        if (closestCrabDist < 52 && sib.burrowCooldown <= 0) {
+          sib.isBurrowed = true;
+          sib.burrowTimer = 1.2;
+          sib.sprite.setTexture('turtle_burrow');
+          continue;
+        }
+        const dx = sib.x - closestCrab.x;
+        const dy = sib.y - closestCrab.y;
+        const len = Math.hypot(dx, dy) || 1;
+        fleeVx = (dx / len) * 145;
+        fleeVy = (dy / len) * 145;
       }
 
       const sibInShade = isPointInShade(sib.x, sib.y, this.shadeZones);
@@ -1225,14 +1632,21 @@ export class TurtleScene extends Phaser.Scene {
         sibInShade
       );
       sib.wobblePhase += dt * 4.5;
-      const vx = Math.sin(sib.wobblePhase) * 20 + pull.pullX * 0.7;
-      const vy = -sib.speed + pull.pullY * 0.65;
+      const vx = Math.sin(sib.wobblePhase) * 20 + pull.pullX * 0.7 + fleeVx;
+      const vy = -sib.speed + pull.pullY * 0.65 + fleeVy;
 
       sib.x = Phaser.Math.Clamp(sib.x + vx * dt, 98, this.WORLD_WIDTH - 98);
-      sib.y += vy * dt;
+      sib.y = Phaser.Math.Clamp(
+        sib.y + vy * dt,
+        this.SURF_Y + 12,
+        this.worldHeight - 40
+      );
 
+      sib.sprite.setTexture('turtle_crawl');
       sib.sprite.setPosition(sib.x, sib.y);
-      sib.sprite.setRotation(Math.atan2(vy, vx));
+      if (Math.hypot(vx, vy) > 5) {
+        sib.sprite.setRotation(Math.atan2(vy, vx));
+      }
 
       if (sib.y <= this.SURF_Y + 18) {
         sib.active = false;
@@ -1384,6 +1798,7 @@ export class TurtleScene extends Phaser.Scene {
 
   private renderNightVisuals(dt: number): void {
     const t = this.time.now * 0.0025;
+    const predatorVis = getPredatorVisibilityAlpha(this.blindnessTimer);
 
     // 1. Animated white breaking ocean surf along SURF_Y
     this.surfGraphics.clear();
@@ -1409,37 +1824,66 @@ export class TurtleScene extends Phaser.Scene {
       this.trackGraphics.fillCircle(pt.x - perpX, pt.y - perpY, 2.1);
     }
 
-    // 3. Coastal resort light-pollution cones & sand glare pools
+    // 3. Coastal resort moving spotlights & sand glare pools
     this.lightGraphics.clear();
     for (const light of this.resortLights) {
       const { x, y, radius } = light.pool;
-      this.lightGraphics.fillStyle(0xfef08a, 0.08);
+      const dx = x - light.fixtureX;
+      const dy = y - light.fixtureY;
+      const len = Math.hypot(dx, dy) || 1;
+      const perpX = (-dy / len) * (radius * 0.45);
+      const perpY = (dx / len) * (radius * 0.45);
+
+      this.lightGraphics.fillStyle(0xfef08a, 0.09);
       this.lightGraphics.fillTriangle(
         light.fixtureX,
         light.fixtureY,
-        x - radius * 0.35,
-        y + radius * 0.22,
-        x + radius * 0.35,
-        y - radius * 0.22
+        x - perpX,
+        y - perpY,
+        x + perpX,
+        y + perpY
       );
-      this.lightGraphics.fillStyle(0xf59e0b, 0.14);
+      this.lightGraphics.fillStyle(0xf59e0b, 0.15);
       this.lightGraphics.fillCircle(x, y, radius);
-      this.lightGraphics.fillStyle(0xfef08a, 0.18);
+      this.lightGraphics.fillStyle(0xfef08a, 0.2);
       this.lightGraphics.fillCircle(x, y, radius * 0.52);
-      this.lightGraphics.lineStyle(1, 0xfbbf24, 0.24);
+      this.lightGraphics.lineStyle(1, 0xfbbf24, 0.26);
       this.lightGraphics.strokeCircle(x, y, radius);
     }
 
-    // 4. Seabird telegraph strike rings
+    // 4. Seabird telegraph strike rings (hidden when blinded by spotlight)
     this.birdOverlayGraphics.clear();
-    for (const bird of this.seabirds) {
-      if (bird.state === 'telegraph' || bird.state === 'dive') {
-        const pulse = 0.65 + Math.sin(this.time.now * 0.025) * 0.25;
-        this.birdOverlayGraphics.fillStyle(0xef4444, 0.14 * pulse);
-        this.birdOverlayGraphics.fillCircle(bird.strikeX, bird.strikeY, 42);
-        this.birdOverlayGraphics.lineStyle(2.5, 0xef4444, 0.85 * pulse);
-        this.birdOverlayGraphics.strokeCircle(bird.strikeX, bird.strikeY, 42);
+    if (predatorVis > 0.01) {
+      for (const bird of this.seabirds) {
+        if (bird.state === 'telegraph' || bird.state === 'dive') {
+          const pulse = 0.65 + Math.sin(this.time.now * 0.025) * 0.25;
+          this.birdOverlayGraphics.fillStyle(
+            0xef4444,
+            0.14 * pulse * predatorVis
+          );
+          this.birdOverlayGraphics.fillCircle(bird.strikeX, bird.strikeY, 42);
+          this.birdOverlayGraphics.lineStyle(
+            2.5,
+            0xef4444,
+            0.85 * pulse * predatorVis
+          );
+          this.birdOverlayGraphics.strokeCircle(bird.strikeX, bird.strikeY, 42);
+        }
       }
+    }
+
+    // 5. Full-screen glare wash while night vision is blinded by a spotlight
+    this.blindOverlayGraphics.clear();
+    if (this.blindnessTimer > 0) {
+      const blindAlpha =
+        Phaser.Math.Clamp(this.blindnessTimer / 3.4, 0, 1) * 0.28;
+      this.blindOverlayGraphics.fillStyle(0xfef9c3, blindAlpha);
+      this.blindOverlayGraphics.fillRect(
+        0,
+        0,
+        this.scale.width,
+        this.scale.height
+      );
     }
   }
 
@@ -1452,16 +1896,26 @@ export class TurtleScene extends Phaser.Scene {
       Math.round(this.levelTargetMeters * (1 - progressPct))
     );
 
-    const anyBirdDiving = this.seabirds.some(
-      (b) => b.state === 'telegraph' || b.state === 'dive'
-    );
-    const vignetteColor = anyBirdDiving
+    const predatorVis = getPredatorVisibilityAlpha(this.blindnessTimer);
+    const canSeeDivingBird =
+      predatorVis > 0.15 &&
+      this.seabirds.some(
+        (b) =>
+          (b.state === 'telegraph' || b.state === 'dive') &&
+          b.targetKind === 'player'
+      );
+
+    const vignetteColor = canSeeDivingBird
       ? 0xef4444
+      : this.blindnessTimer > 0
+      ? 0xfef08a
       : this.currentGlare > 0.2
       ? 0xf59e0b
       : undefined;
-    const vignetteAlpha = anyBirdDiving
+    const vignetteAlpha = canSeeDivingBird
       ? 0.36
+      : this.blindnessTimer > 0
+      ? Phaser.Math.Clamp(this.blindnessTimer / 3.4, 0, 1) * 0.42
       : this.currentGlare > 0.2
       ? this.currentGlare * 0.35
       : 0;
@@ -1491,10 +1945,17 @@ export class TurtleScene extends Phaser.Scene {
       secondaryBar = {
         pct: secsLeft / this.MAX_BURROW_DURATION,
         fillColor: 0x2dd4bf,
-        tagText: `BURROWED • ${secsLeft.toFixed(1)}s`,
+        tagText: `BURROWED • RECOVERING ${secsLeft.toFixed(1)}s`,
         tagColor: '#5eead4',
       };
-    } else if (anyBirdDiving) {
+    } else if (this.blindnessTimer > 0.1) {
+      secondaryBar = {
+        pct: Phaser.Math.Clamp(this.blindnessTimer / 3.8, 0, 1),
+        fillColor: 0xfef08a,
+        tagText: `BLINDED • ${this.blindnessTimer.toFixed(1)}s`,
+        tagColor: '#fef08a',
+      };
+    } else if (canSeeDivingBird) {
       secondaryBar = {
         pct: 1,
         fillColor: 0xef4444,

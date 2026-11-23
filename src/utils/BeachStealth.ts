@@ -9,6 +9,16 @@ export interface LightPool {
   sourceY: number;
 }
 
+export interface SweepingSpotlight {
+  baseX: number;
+  baseY: number;
+  ampX: number;
+  ampY: number;
+  speedX: number;
+  speedY: number;
+  phase: number;
+}
+
 export interface ShadeZone {
   x: number;
   y: number;
@@ -23,6 +33,19 @@ export interface LightPullResult {
 }
 
 const MAX_LIGHT_PULL_SPEED = 115;
+
+/** Computes the 2D beach coordinates of a moving coastal spotlight at `timeSec`. */
+export function computeSpotlightPosition(
+  spot: SweepingSpotlight,
+  timeSec: number
+): { x: number; y: number } {
+  return {
+    x: spot.baseX + Math.sin(timeSec * spot.speedX + spot.phase) * spot.ampX,
+    y:
+      spot.baseY +
+      Math.cos(timeSec * spot.speedY + spot.phase * 1.3) * spot.ampY,
+  };
+}
 
 /** Returns true when `(x, y)` lies inside any elliptical driftwood/dune shade zone. */
 export function isPointInShade(
@@ -84,6 +107,61 @@ export function computeLightPollutionPull(
   }
 
   return { pullX, pullY, glare };
+}
+
+/**
+ * Updates flash-blindness duration caused by stepping exposed into a coastal spotlight.
+ * Stepping into bright glare sets/refreshes blindness for ~2.8-4.0s; otherwise decays cleanly.
+ */
+export function updateBlindnessTimer(
+  currentTimer: number,
+  glare: number,
+  isBurrowed: boolean,
+  inShade: boolean,
+  dt: number
+): number {
+  const safeDt = Math.max(0, dt);
+  if (!isBurrowed && !inShade && glare > 0.22) {
+    const triggered = 2.6 + clamp(glare, 0, 1) * 1.4;
+    return Math.max(currentTimer, triggered);
+  }
+  return Math.max(0, currentTimer - safeDt);
+}
+
+/**
+ * Alpha multiplier (0..1) for rendering birds, crabs, and strike rings under spotlight blindness.
+ * Predators are completely invisible until the final `fadeWindow` seconds of recovery.
+ */
+export function getPredatorVisibilityAlpha(
+  blindnessTimer: number,
+  fadeWindow = 0.85
+): number {
+  if (blindnessTimer <= 0) return 1;
+  if (fadeWindow <= 0 || blindnessTimer >= fadeWindow) return 0;
+  return clamp(1 - blindnessTimer / fadeWindow, 0, 1);
+}
+
+/** Recovers hatchling stamina while safely burrowed in sand, capped at `maxStamina`. */
+export function recoverBurrowedStamina(
+  stamina: number,
+  maxStamina: number,
+  dt: number,
+  recoveryRate = 18
+): number {
+  const safeMax = Math.max(0, maxStamina);
+  return Math.min(safeMax, Math.max(0, stamina) + recoveryRate * Math.max(0, dt));
+}
+
+/** Steep predator scaling across levels so higher difficulties swarm with crabs and seabirds. */
+export function computeTurtlePredatorCounts(level: number): {
+  crabCount: number;
+  birdCount: number;
+} {
+  const safeLevel = Math.max(1, Math.floor(level));
+  return {
+    crabCount: Math.min(48, 6 + (safeLevel - 1) * 6),
+    birdCount: Math.min(28, 3 + (safeLevel - 1) * 4),
+  };
 }
 
 /** Effective seabird detection radius expanded by light glare, or 0 while concealed. */

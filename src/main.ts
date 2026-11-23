@@ -538,7 +538,7 @@ winState.showTurtleImpactModal = (payload) => {
           payload.level + 1
         } (${payload.nextLevelMeters}m) where resort floodlights sweep wider and cool kelp is scarcer!`
       : payload.deathReason === 'predator'
-      ? `Artificial coastal glare illuminates hatchlings across open sand, drawing swooping seabirds from above. Use driftwood shadows or hold SPACE to burrow before predators strike (${payload.totalMetersMigrated}m total progress).`
+      ? `Sweeping coastal spotlights blind hatchlings and illuminate open sand, drawing swooping seabirds from above. Use driftwood shadows or hold SPACE to burrow before predators strike (${payload.totalMetersMigrated}m total progress).`
       : `You crawled ${payload.metersInLevel}m / ${payload.levelTargetMeters}m on Level ${payload.level} (${payload.totalMetersMigrated}m total) before resort glare, plastic debris drag, and ghost crabs exhausted your yolk-sac reserves.`,
     nextButtonLabel: `Next Hatchling Dash (Level ${payload.level + 1} • ${payload.nextLevelMeters}m →)`,
     nextLevelData: payload.nextLevelData,
