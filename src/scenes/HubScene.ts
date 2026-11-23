@@ -123,10 +123,10 @@ export class HubScene extends Phaser.Scene {
     if (width >= 1080) {
       const gap = 18;
       const cardWidth = Math.min(290, (width - 96 - gap * 3) / 4);
-      const cardHeight = Math.min(355, Math.max(300, height - 200));
+      const cardHeight = Math.min(385, Math.max(325, height - 190));
       const totalW = cardWidth * 4 + gap * 3;
       const startX = (width - totalW) / 2 + cardWidth / 2;
-      const cardY = Math.max(156 + cardHeight / 2, height / 2 + 30);
+      const cardY = Math.max(156 + cardHeight / 2, height / 2 + 28);
 
       EPISODES.forEach((ep, idx) => {
         const cx = startX + idx * (cardWidth + gap);
@@ -167,6 +167,8 @@ export class HubScene extends Phaser.Scene {
     const compactW = w < 300;
     const compactH = h < 300;
     const padX = compactW ? 16 : 22;
+    const contentW = w - padX * 2;
+    let curY = -h / 2 + (compactH ? 14 : 20);
 
     const panel = this.add.graphics();
     const drawCard = (hover: boolean) => {
@@ -178,69 +180,55 @@ export class HubScene extends Phaser.Scene {
     };
     drawCard(false);
 
-    const titleText = this.add.text(
-      -w / 2 + padX,
-      -h / 2 + (compactH ? 16 : 22),
-      ep.title,
-      {
-        fontSize: compactW ? '18px' : '21px',
-        fontStyle: 'bold',
-        color: '#ffffff',
-      }
-    );
+    const titleText = this.add.text(-w / 2 + padX, curY, ep.title, {
+      fontSize: compactW ? '18px' : '21px',
+      fontStyle: 'bold',
+      color: '#ffffff',
+      wordWrap: { width: contentW },
+    });
+    curY += titleText.height + (compactH ? 5 : 8);
 
-    const regionText = this.add.text(
-      -w / 2 + padX,
-      -h / 2 + (compactH ? 42 : 54),
-      ep.region,
-      {
-        fontSize: compactW ? '10px' : '11px',
-        fontStyle: 'bold',
-        color: '#7dd3fc',
-      }
-    );
+    const regionText = this.add.text(-w / 2 + padX, curY, ep.region, {
+      fontSize: compactW ? '10px' : '11px',
+      fontStyle: 'bold',
+      color: '#7dd3fc',
+      wordWrap: { width: contentW },
+    });
+    curY += regionText.height + (compactH ? 5 : 7);
 
-    const speciesText = this.add.text(
-      -w / 2 + padX,
-      -h / 2 + (compactH ? 60 : 80),
-      ep.species,
-      {
-        fontSize: compactW || compactH ? '12px' : '13px',
-        color: '#cbd5e1',
-      }
-    );
+    const speciesText = this.add.text(-w / 2 + padX, curY, ep.species, {
+      fontSize: compactW || compactH ? '12px' : '13px',
+      color: '#cbd5e1',
+      wordWrap: { width: contentW },
+    });
+    curY += speciesText.height + (compactH ? 7 : 10);
 
-    const statusBadge = this.add.text(
-      -w / 2 + padX,
-      -h / 2 + (compactH ? 82 : 108),
-      ep.status,
-      {
-        fontSize: compactW || compactH ? '10px' : '11px',
-        fontStyle: 'bold',
-        color: ep.playable ? '#fbbf24' : '#f87171',
-        backgroundColor: 'rgba(15, 23, 42, 0.85)',
-        padding: { x: 8, y: 4 },
-        wordWrap: { width: w - padX * 2 },
-      }
-    );
+    const statusBadge = this.add.text(-w / 2 + padX, curY, ep.status, {
+      fontSize: compactW || compactH ? '10px' : '11px',
+      fontStyle: 'bold',
+      color: ep.playable ? '#fbbf24' : '#f87171',
+      backgroundColor: 'rgba(15, 23, 42, 0.85)',
+      padding: { x: 8, y: 4 },
+      wordWrap: { width: contentW - 16 },
+    });
+    curY += statusBadge.height + (compactH ? 8 : 12);
 
-    const summaryY = statusBadge.y + statusBadge.height + (compactH ? 8 : 14);
     const summaryText = this.add.text(
       -w / 2 + padX,
-      summaryY,
+      curY,
       ep.mechanicSummary,
       {
         fontSize: compactW || compactH ? '12px' : '13px',
         color: '#94a3b8',
         lineSpacing: compactH ? 3 : 5,
-        wordWrap: { width: w - padX * 2 },
+        wordWrap: { width: contentW },
       }
     );
 
     const btnBg = this.add.graphics();
-    const btnY = h / 2 - (compactH ? 30 : 42);
+    const btnY = h / 2 - (compactH ? 28 : 38);
     btnBg.fillStyle(ep.playable ? ep.accentColor : 0x1e293b, 1);
-    btnBg.fillRoundedRect(-w / 2 + padX, btnY - 18, w - padX * 2, 36, 8);
+    btnBg.fillRoundedRect(-w / 2 + padX, btnY - 18, contentW, 36, 8);
 
     const btnLabel = this.add
       .text(
