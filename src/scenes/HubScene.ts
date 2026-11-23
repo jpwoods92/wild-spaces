@@ -7,6 +7,7 @@ interface EpisodeCard {
   region: string;
   title: string;
   species: string;
+  scientificName: string;
   status: string;
   mechanicSummary: string;
   playable: boolean;
@@ -18,7 +19,8 @@ const EPISODES: EpisodeCard[] = [
     id: 'PolarBearScene',
     region: 'BEAUFORT SEA, ARCTIC',
     title: '01 • The Thinning North',
-    species: 'Polar Bear (Ursus maritimus)',
+    species: 'Polar Bear',
+    scientificName: 'Ursus maritimus',
     status: 'VULNERABLE — 13% sea-ice loss/decade',
     mechanicSummary:
       'Migrate 1,000m north to permanent pack ice & your cub. Ice floes crack and shrink beneath you; hunt seals to keep warmth & stamina up across open water.',
@@ -29,7 +31,8 @@ const EPISODES: EpisodeCard[] = [
     id: 'WhaleScene',
     region: 'NORTH ATLANTIC OCEAN',
     title: '02 • Drowned Echoes',
-    species: 'North Atlantic Right Whale (Eubalaena glacialis)',
+    species: 'North Atlantic Right Whale',
+    scientificName: 'Eubalaena glacialis',
     status: 'CRITICALLY ENDANGERED — <360 remaining',
     mechanicSummary:
       'Press SPACE to sing and follow your calf’s echo through dark water. Commercial shipping lanes, ghost fishing gear & seismic sonar flood the sea with blinding noise.',
@@ -40,7 +43,8 @@ const EPISODES: EpisodeCard[] = [
     id: 'LemurScene',
     region: 'SPINY FOREST, MADAGASCAR',
     title: '03 • Fractured Canopy',
-    species: 'Ring-Tailed Lemur (Lemur catta)',
+    species: 'Ring-Tailed Lemur',
+    scientificName: 'Lemur catta',
     status: 'ENDANGERED — >80% habitat fragmented',
     mechanicSummary:
       'Hold SPACE to aim and charge long canopy leaps from crown to crown while an advancing slash-and-burn fire wall sweeps northward behind you.',
@@ -51,7 +55,8 @@ const EPISODES: EpisodeCard[] = [
     id: 'TurtleScene',
     region: 'ATLANTIC NESTING BEACH',
     title: '04 • False Horizon',
-    species: 'Loggerhead Sea Turtle (Caretta caretta)',
+    species: 'Loggerhead Sea Turtle',
+    scientificName: 'Caretta caretta',
     status: 'VULNERABLE: 1 in 1,000 reach adulthood',
     mechanicSummary:
       'Crawl from your dune nest to the moonlit surf. Hold SPACE to burrow under sand as seabirds dive and ghost crabs prowl, while resisting resort light pull and plastic debris.',
@@ -201,7 +206,20 @@ export class HubScene extends Phaser.Scene {
       color: '#cbd5e1',
       wordWrap: { width: contentW },
     });
-    curY += speciesText.height + (compactH ? 7 : 10);
+    curY += speciesText.height + (compactH ? 2 : 3);
+
+    const scientificText = this.add.text(
+      -w / 2 + padX,
+      curY,
+      ep.scientificName,
+      {
+        fontSize: compactW || compactH ? '11px' : '12px',
+        fontStyle: 'italic',
+        color: '#94a3b8',
+        wordWrap: { width: contentW },
+      }
+    );
+    curY += scientificText.height + (compactH ? 7 : 10);
 
     const statusBadge = this.add.text(-w / 2 + padX, curY, ep.status, {
       fontSize: compactW || compactH ? '10px' : '11px',
@@ -250,6 +268,7 @@ export class HubScene extends Phaser.Scene {
       titleText,
       regionText,
       speciesText,
+      scientificText,
       statusBadge,
       summaryText,
       btnBg,
